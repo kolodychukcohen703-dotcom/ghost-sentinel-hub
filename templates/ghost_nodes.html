@@ -12,7 +12,7 @@
       padding: 0;
     }
     .wrap {
-      max-width: 960px;
+      max-width: 1024px;
       margin: 24px auto;
       padding: 16px;
       border-radius: 12px;
@@ -27,6 +27,14 @@
       font-size: 1rem;
       color: #bbf7d0;
     }
+    h2 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #a5b4fc;
+    }
     .subtitle {
       font-size: 0.8rem;
       color: #9ca3af;
@@ -40,6 +48,7 @@
     th, td {
       padding: 6px 8px;
       border-bottom: 1px solid #1f2937;
+      vertical-align: top;
     }
     th {
       text-align: left;
@@ -58,6 +67,64 @@
     a:hover {
       text-decoration: underline;
     }
+    .form-card {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #22c55e44;
+      background: rgba(15, 23, 42, 0.8);
+      font-size: 0.8rem;
+    }
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .form-row label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #9ca3af;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .form-row input, .form-row textarea, .form-row select {
+      background: #020617;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 4px 6px;
+      color: #e5e7eb;
+      font-family: inherit;
+      font-size: 0.8rem;
+      min-width: 140px;
+    }
+    .form-row textarea {
+      width: 100%;
+      min-height: 48px;
+      resize: vertical;
+    }
+    .btn-primary {
+      margin-top: 4px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #22c55eaa;
+      background: #16a34a33;
+      color: #bbf7d0;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-primary:hover {
+      background: #16a34a55;
+    }
+    .tag-pill {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #22c55eaa;
+      background: #16a34a22;
+      margin-left: 4px;
+    }
   </style>
 </head>
 <body>
@@ -68,10 +135,92 @@
       Each row is a ghost door into one of your Sentinel worlds.
     </div>
 
+    <h2>Register / Update Device</h2>
+    <div class="form-card">
+      <form method="post" action="/register-device">
+        <div class="form-row">
+          <div>
+            <label for="device_name">Device Name</label>
+            <input id="device_name" name="device_name" placeholder="CLOAKNODE01 phone">
+          </div>
+          <div>
+            <label for="device_type">Type</label>
+            <input id="device_type" name="device_type" placeholder="phone / pc / tablet">
+          </div>
+          <div>
+            <label for="mac">MAC Address</label>
+            <input id="mac" name="mac" placeholder="AA:BB:CC:DD:EE:FF">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label for="api_key">API Key / Shared Secret</label>
+            <input id="api_key" name="api_key" placeholder="optional – for handshakes">
+          </div>
+        </div>
+        <div class="form-row">
+          <div style="flex:1">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" placeholder="Where this device lives, what it protects, etc."></textarea>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Save Device</button>
+      </form>
+      <div style="margin-top:6px; font-size:0.7rem; color:#9ca3af;">
+        Tip: You can copy the same MAC/API key into your local
+        <code>.ghost_sentinel_node.json</code> so tunnels from that device
+        carry a matching handshake.
+      </div>
+    </div>
+
+    <h2>Registered Devices</h2>
+    {% if not devices %}
+      <p style="font-size:0.8rem; color:#6b7280;">
+        No devices registered yet. Use the form above to add your phone, PC,
+        or future nodes to the Ghost Network.
+      </p>
+    {% else %}
+      <table>
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Type</th>
+            <th>MAC</th>
+            <th>API</th>
+            <th>Created</th>
+            <th>Last Seen</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in devices %}
+          <tr>
+            <td>{{ d.name }}</td>
+            <td>{{ d.device_type or "—" }}</td>
+            <td>{{ d.mac or "—" }}</td>
+            <td>
+              {% if d.api_key_set %}
+                <span class="tag-pill">key set</span>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>{{ d.created_at or "—" }}</td>
+            <td>{{ d.last_seen or "—" }}</td>
+            <td>{{ d.notes or "" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <h2>Active / Recent Nodes</h2>
     {% if not nodes %}
-      <p>No nodes have registered yet. Once your local node runs
-      <code>sentinel_remote_access_ghost.py</code> and opens a tunnel,
-      it will appear here.</p>
+      <p style="font-size:0.8rem; color:#6b7280;">
+        No nodes have registered yet. Once a node runs
+        <code>sentinel_remote_access_ghost.py</code> and opens a tunnel,
+        it will appear here.
+      </p>
     {% else %}
       <table>
         <thead>
@@ -80,6 +229,7 @@
             <th>Service</th>
             <th>Public URL</th>
             <th>Last Seen (UTC)</th>
+            <th>Info</th>
           </tr>
         </thead>
         <tbody>
@@ -89,6 +239,7 @@
             <td>{{ entry.service }}</td>
             <td><a href="{{ entry.url }}" target="_blank">{{ entry.url }}</a></td>
             <td>{{ entry.last_seen }}</td>
+            <td>{{ entry.meta }}</td>
           </tr>
           {% endfor %}
         </tbody>
