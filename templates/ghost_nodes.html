@@ -1,250 +1,229 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Ghost Sentinel Hub – ACCENET Ghost Network</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ghost Sentinel Hub</title>
   <style>
-    body {
-      background: #020617;
-      color: #e5e7eb;
-      font-family: "Fira Code", monospace;
-      margin: 0;
-      padding: 0;
-    }
-    .wrap {
-      max-width: 1024px;
-      margin: 24px auto;
-      padding: 16px;
-      border-radius: 12px;
-      border: 1px solid #22c55e55;
-      box-shadow: 0 0 30px #22c55e33;
-      background: radial-gradient(circle at top, #020617, #000000);
-    }
-    h1 {
-      margin-top: 0;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 1rem;
-      color: #bbf7d0;
-    }
-    h2 {
-      margin-top: 1.5rem;
-      margin-bottom: 0.5rem;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: #a5b4fc;
-    }
-    .subtitle {
-      font-size: 0.8rem;
-      color: #9ca3af;
-      margin-bottom: 12px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.8rem;
-    }
-    th, td {
-      padding: 6px 8px;
-      border-bottom: 1px solid #1f2937;
-      vertical-align: top;
-    }
-    th {
-      text-align: left;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.75rem;
-      color: #a5b4fc;
-    }
-    tr:nth-child(even) {
-      background: rgba(15, 23, 42, 0.6);
-    }
-    a {
-      color: #7dd3fc;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    .form-card {
-      margin-top: 12px;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid #22c55e44;
-      background: rgba(15, 23, 42, 0.8);
-      font-size: 0.8rem;
-    }
-    .form-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    .form-row label {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #9ca3af;
-      display: block;
-      margin-bottom: 2px;
-    }
-    .form-row input, .form-row textarea, .form-row select {
-      background: #020617;
-      border: 1px solid #374151;
-      border-radius: 6px;
-      padding: 4px 6px;
-      color: #e5e7eb;
-      font-family: inherit;
-      font-size: 0.8rem;
-      min-width: 140px;
-    }
-    .form-row textarea {
-      width: 100%;
-      min-height: 48px;
-      resize: vertical;
-    }
-    .btn-primary {
-      margin-top: 4px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid #22c55eaa;
-      background: #16a34a33;
-      color: #bbf7d0;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-    .btn-primary:hover {
-      background: #16a34a55;
-    }
-    .tag-pill {
-      font-size: 0.7rem;
-      padding: 2px 6px;
-      border-radius: 999px;
-      border: 1px solid #22c55eaa;
-      background: #16a34a22;
-      margin-left: 4px;
-    }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 18px; }
+    h1 { margin: 0 0 8px 0; }
+    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; align-items: start; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+    th { background: #fafafa; position: sticky; top: 0; }
+    .small { font-size: 12px; color: #666; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    input, select { padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+    button { padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; cursor: pointer; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; }
+    .ok { color: #0a7; border-color: #0a7; }
+    .warn { color: #c60; border-color: #c60; }
+    #chatLog { height: 340px; overflow: auto; border: 1px solid #eee; border-radius: 10px; padding: 10px; background: #fbfbfb; }
+    .msg { margin: 0 0 8px 0; }
+    .msg .meta { color: #666; font-size: 12px; }
+    .msg .text { font-size: 14px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Ghost Sentinel Hub • ACCENET Ghost Network</h1>
-    <div class="subtitle">
-      Nodes register here when they open Cloudflare tunnels.
-      Each row is a ghost door into one of your Sentinel worlds.
-    </div>
+  <h1>Ghost Sentinel Hub</h1>
+  <div class="small">Nodes register here when they open Cloudflare tunnels. Now with <b>World Chat</b>.</div>
 
-    <h2>Register / Update Device</h2>
-    <div class="form-card">
-      <form method="post" action="/register-device">
-        <div class="form-row">
-          <div>
-            <label for="device_name">Device Name</label>
-            <input id="device_name" name="device_name" placeholder="CLOAKNODE01 phone">
-          </div>
-          <div>
-            <label for="device_type">Type</label>
-            <input id="device_type" name="device_type" placeholder="phone / pc / tablet">
-          </div>
-          <div>
-            <label for="mac">MAC Address</label>
-            <input id="mac" name="mac" placeholder="AA:BB:CC:DD:EE:FF">
-          </div>
-        </div>
-        <div class="form-row">
-          <div>
-            <label for="api_key">API Key / Shared Secret</label>
-            <input id="api_key" name="api_key" placeholder="optional – for handshakes">
-          </div>
-        </div>
-        <div class="form-row">
-          <div style="flex:1">
-            <label for="notes">Notes</label>
-            <textarea id="notes" name="notes" placeholder="Where this device lives, what it protects, etc."></textarea>
-          </div>
-        </div>
-        <button type="submit" class="btn-primary">Save Device</button>
-      </form>
-      <div style="margin-top:6px; font-size:0.7rem; color:#9ca3af;">
-        Tip: You can copy the same MAC/API key into your local
-        <code>.ghost_sentinel_node.json</code> so tunnels from that device
-        carry a matching handshake.
+  <div class="grid" style="margin-top: 14px;">
+    <div class="card">
+      <h2 style="margin: 0 0 8px 0;">Nodes</h2>
+      <div class="small">If your node launcher is running, you should see doors appear here.</div>
+      <div style="max-height: 420px; overflow: auto; margin-top: 10px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Service</th>
+              <th>Public URL</th>
+              <th>Last Seen (UTC)</th>
+              <th>Meta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for n in nodes %}
+            <tr>
+              <td>{{ n.node }}</td>
+              <td>{{ n.service }}</td>
+              <td>
+                {% if n.url %}
+                  <a href="{{ n.url }}" target="_blank" rel="noreferrer">{{ n.url }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ n.last_seen }}</td>
+              <td>{{ n.meta }}</td>
+            </tr>
+            {% endfor %}
+            {% if nodes|length == 0 %}
+            <tr><td colspan="5" class="small">No nodes registered yet.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <h2>Registered Devices</h2>
-    {% if not devices %}
-      <p style="font-size:0.8rem; color:#6b7280;">
-        No devices registered yet. Use the form above to add your phone, PC,
-        or future nodes to the Ghost Network.
-      </p>
-    {% else %}
+    <div class="card">
+      <h2 style="margin: 0 0 8px 0;">World Chat</h2>
+      <div class="small">Join a room like <span class="pill">#101</span> or create your own.</div>
+
+      <div class="row" style="margin-top: 10px;">
+        <input id="userName" placeholder="Name (e.g. Cohen)" style="flex: 1;" />
+        <select id="roomSel">
+          {% for r in default_rooms %}
+            <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+        <button id="joinBtn">Join</button>
+        <button id="leaveBtn">Leave</button>
+      </div>
+
+      <div class="row" style="margin-top: 10px; align-items: center;">
+        <span id="status" class="pill warn">disconnected</span>
+        <span class="small">Room: <b id="roomLabel">—</b></span>
+      </div>
+
+      <div id="chatLog" style="margin-top: 10px;"></div>
+
+      <div class="row" style="margin-top: 10px;">
+        <input id="chatMsg" placeholder="Message…" style="flex: 1;" />
+        <button id="sendBtn">Send</button>
+      </div>
+      <div class="small" style="margin-top: 8px;">
+        Tip: If you redeploy Render, chat history resets (it’s in-memory).
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 16px;">
+    <h2 style="margin: 0 0 8px 0;">Devices</h2>
+    <form method="post" action="/register-device">
+      <div class="row">
+        <input name="device_name" placeholder="Device name" required />
+        <input name="device_type" placeholder="Type (phone, pc, etc.)" />
+        <input name="mac" placeholder="MAC address" />
+        <input name="api_key" placeholder="API key (optional)" />
+        <input name="notes" placeholder="Notes" style="flex: 1;" />
+        <button type="submit">Save</button>
+      </div>
+    </form>
+
+    <div style="max-height: 280px; overflow: auto; margin-top: 10px;">
       <table>
         <thead>
           <tr>
-            <th>Device</th>
+            <th>Name</th>
             <th>Type</th>
             <th>MAC</th>
-            <th>API</th>
             <th>Created</th>
-            <th>Last Seen</th>
+            <th>Last Seen (UTC)</th>
             <th>Notes</th>
+            <th>API Key</th>
           </tr>
         </thead>
         <tbody>
           {% for d in devices %}
           <tr>
             <td>{{ d.name }}</td>
-            <td>{{ d.device_type or "—" }}</td>
-            <td>{{ d.mac or "—" }}</td>
-            <td>
-              {% if d.api_key_set %}
-                <span class="tag-pill">key set</span>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>{{ d.created_at or "—" }}</td>
-            <td>{{ d.last_seen or "—" }}</td>
-            <td>{{ d.notes or "" }}</td>
+            <td>{{ d.device_type }}</td>
+            <td>{{ d.mac }}</td>
+            <td>{{ d.created_at }}</td>
+            <td>{{ d.last_seen }}</td>
+            <td>{{ d.notes }}</td>
+            <td>{% if d.api_key_set %}<span class="pill ok">set</span>{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
+          {% if devices|length == 0 %}
+          <tr><td colspan="7" class="small">No devices registered yet.</td></tr>
+          {% endif %}
         </tbody>
       </table>
-    {% endif %}
-
-    <h2>Active / Recent Nodes</h2>
-    {% if not nodes %}
-      <p style="font-size:0.8rem; color:#6b7280;">
-        No nodes have registered yet. Once a node runs
-        <code>sentinel_remote_access_ghost.py</code> and opens a tunnel,
-        it will appear here.
-      </p>
-    {% else %}
-      <table>
-        <thead>
-          <tr>
-            <th>Node</th>
-            <th>Service</th>
-            <th>Public URL</th>
-            <th>Last Seen (UTC)</th>
-            <th>Info</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for entry in nodes %}
-          <tr>
-            <td>{{ entry.node }}</td>
-            <td>{{ entry.service }}</td>
-            <td><a href="{{ entry.url }}" target="_blank">{{ entry.url }}</a></td>
-            <td>{{ entry.last_seen }}</td>
-            <td>{{ entry.meta }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endif %}
+    </div>
   </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const statusEl = document.getElementById("status");
+    const roomLabel = document.getElementById("roomLabel");
+    const logEl = document.getElementById("chatLog");
+    const roomSel = document.getElementById("roomSel");
+
+    let socket = null;
+    let currentRoom = null;
+
+    function appendMsg(m) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `[${m.ts}] ${m.sender} @ ${m.room}`;
+      const text = document.createElement("div");
+      text.className = "text";
+      text.textContent = m.msg;
+      div.appendChild(meta);
+      div.appendChild(text);
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(ok, text) {
+      statusEl.textContent = text;
+      statusEl.className = "pill " + (ok ? "ok" : "warn");
+    }
+
+    function ensureSocket() {
+      if (socket) return;
+      socket = io();
+      socket.on("connect", () => setStatus(true, "connected"));
+      socket.on("disconnect", () => setStatus(false, "disconnected"));
+      socket.on("chat_history", (items) => {
+        logEl.innerHTML = "";
+        (items || []).forEach(appendMsg);
+      });
+      socket.on("chat_message", (m) => appendMsg(m));
+    }
+
+    document.getElementById("joinBtn").addEventListener("click", () => {
+      const user = (document.getElementById("userName").value || "guest").trim();
+      const room = (roomSel.value || "#101").trim();
+      ensureSocket();
+      if (currentRoom) socket.emit("leave", {room: currentRoom, user});
+      currentRoom = room;
+      roomLabel.textContent = room;
+      socket.emit("join", {room, user});
+    });
+
+    document.getElementById("leaveBtn").addEventListener("click", () => {
+      if (!socket || !currentRoom) return;
+      const user = (document.getElementById("userName").value || "guest").trim();
+      socket.emit("leave", {room: currentRoom, user});
+      currentRoom = null;
+      roomLabel.textContent = "—";
+      logEl.innerHTML = "";
+    });
+
+    document.getElementById("sendBtn").addEventListener("click", () => {
+      if (!socket || !currentRoom) return;
+      const user = (document.getElementById("userName").value || "guest").trim();
+      const msgBox = document.getElementById("chatMsg");
+      const msg = (msgBox.value || "").trim();
+      if (!msg) return;
+      socket.emit("send_message", {room: currentRoom, user, msg});
+      msgBox.value = "";
+      msgBox.focus();
+    });
+
+    document.getElementById("chatMsg").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("sendBtn").click();
+      }
+    });
+  </script>
 </body>
 </html>
