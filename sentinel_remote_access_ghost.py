@@ -2,7 +2,9 @@
 """Ghost-enabled Sentinel Remote Access Launcher.
 
 Starts Cloudflare quick tunnels and optionally registers them with
-your Ghost Sentinel Hub (running on Render or locally).
+your Ghost Sentinel Hub (running on Render or locally). Supports:
+  - Device MAC + API key handshakes
+  - Extra raw metadata payload to the hub
 """
 
 import json
@@ -30,13 +32,15 @@ def save_config(cfg):
 
 
 def print_header():
-    print("""
+    print(
+        """
   ╔══════════════════════════════════════════════════════╗
   ║  ✶ Sentinel Remote Access Launcher (Ghost Mode) ✶   ║
   ║  Ryoko Link: Cloudflare Tunnel via CGNAT            ║
   ║  Ghost Sentinel: Optional Hub Registration          ║
   ╚══════════════════════════════════════════════════════╝
-""")
+"""
+    )
 
 
 def menu(config):
@@ -45,20 +49,33 @@ def menu(config):
     print("  [2] Start tunnel for Sentinel Console/Web (http://localhost:5000)")
     print("  [3] Start tunnel for custom local port    (you type the port)")
     print("  [4] View recent tunnel log entries")
-    print("  [5] Configure Ghost Node (name + hub URL)")
+    print("  [5] Configure Ghost Node (name + hub URL + MAC/API)")
     print("  [6] Quit\n")
-    if config.get("node_name") or config.get("hub_url"):
+    if (
+        config.get("node_name")
+        or config.get("hub_url")
+        or config.get("device_mac")
+        or config.get("api_key")
+        or config.get("extra_note")
+    ):
         print("Current ghost config:")
         if config.get("node_name"):
             print(f"  Node Name : {config['node_name']}")
         if config.get("hub_url"):
             print(f"  Hub URL   : {config['hub_url']}")
+        if config.get("device_mac"):
+            print(f"  MAC       : {config['device_mac']}")
+        if config.get("api_key"):
+            print("  API Key   : (set)")
+        if config.get("extra_note"):
+            print(f"  Note      : {config['extra_note']}")
         print("\n")
     return input("Enter choice (1-6): ").strip()
 
 
 def ensure_cloudflared():
     from shutil import which
+
     if which("cloudflared") is None:
         print("[!] cloudflared not found on PATH. Install it first.\n")
         return False
@@ -81,10 +98,24 @@ def send_to_hub(config, service_label, url):
     node = (config.get("node_name") or "").strip()
     if not hub:
         return
+    mac = (config.get("device_mac") or "").strip()
+    api_key = (config.get("api_key") or "").strip()
+    extra_note = (config.get("extra_note") or "").strip()
+
+    raw_payload = {
+        "sentinel": "ghost-node",
+        "service": service_label,
+        "note": extra_note,
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+    }
+
     payload = {
         "name": node or "UNKNOWN-NODE",
         "service": service_label,
         "url": url,
+        "mac": mac,
+        "api_key": api_key,
+        "data": json.dumps(raw_payload),
     }
     data = parse.urlencode(payload).encode("utf-8")
     req = request.Request(hub.rstrip("/") + "/register-node", data=data, method="POST")
@@ -109,7 +140,6 @@ def run_tunnel_for_port(port, service_label, config):
     print("    You can share that URL to access Sentinel from anywhere.\n")
     print("    Press Ctrl+C here to stop the tunnel and return to the menu.")
     print("======================================================================\n")
-
 
     cmd = [
         "cloudflared",
@@ -175,16 +205,35 @@ def configure_ghost_node(config):
     print("\nConfigure Ghost Sentinel Node\n")
     existing_name = config.get("node_name") or "(none)"
     existing_hub = config.get("hub_url") or "(none)"
+    existing_mac = config.get("device_mac") or "(none)"
+    existing_api = "(set)" if config.get("api_key") else "(none)"
+    existing_note = config.get("extra_note") or "(none)"
+
     print(f"Current node name : {existing_name}")
-    print(f"Current hub URL   : {existing_hub}\n")
+    print(f"Current hub URL   : {existing_hub}")
+    print(f"Current MAC       : {existing_mac}")
+    print(f"Current API key   : {existing_api}")
+    print(f"Current note      : {existing_note}\n")
 
     new_name = input("Enter node name (or leave blank to keep): ").strip()
-    new_hub = input("Enter Ghost Hub base URL (e.g. https://your-hub.onrender.com)\n(or leave blank to keep): ").strip()
+    new_hub = input(
+        "Enter Ghost Hub base URL (e.g. https://ghost-sentinel-hub.onrender.com)\n"
+        "(or leave blank to keep): "
+    ).strip()
+    new_mac = input("Enter device MAC address (or leave blank to keep): ").strip()
+    new_api = input("Enter API/shared secret for this node (or leave blank to keep): ").strip()
+    new_note = input("Enter optional note (where this node lives, etc.) (or leave blank to keep): ").strip()
 
     if new_name:
         config["node_name"] = new_name
     if new_hub:
         config["hub_url"] = new_hub
+    if new_mac:
+        config["device_mac"] = new_mac
+    if new_api:
+        config["api_key"] = new_api
+    if new_note:
+        config["extra_note"] = new_note
 
     save_config(config)
     print("\n[+] Ghost node configuration saved:\n")
@@ -192,6 +241,12 @@ def configure_ghost_node(config):
         print("    Node Name :", config["node_name"])
     if config.get("hub_url"):
         print("    Hub URL   :", config["hub_url"])
+    if config.get("device_mac"):
+        print("    MAC       :", config["device_mac"])
+    if config.get("api_key"):
+        print("    API Key   : (set)")
+    if config.get("extra_note"):
+        print("    Note      :", config["extra_note"])
     print("\n")
 
 
