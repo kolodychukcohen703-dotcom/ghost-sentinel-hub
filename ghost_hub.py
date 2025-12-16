@@ -11,8 +11,6 @@ Environment variables (optional):
   FLASK_SECRET_KEY  -> Optional secret for sessions
 """
 
-import eventlet
-eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_socketio import SocketIO, join_room, leave_room, emit
