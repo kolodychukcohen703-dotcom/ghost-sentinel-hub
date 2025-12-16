@@ -59,7 +59,7 @@
       text-decoration: underline;
     }
 
-    /* --- World Chat (theme-matched, minimal) --- */
+    /* --- World Chat + Bot (theme-matched) --- */
     .panel {
       margin-top: 14px;
       padding: 12px;
@@ -119,7 +119,7 @@
     .pill.warn { color: #fcd34d; border-color: #fcd34d55; }
 
     #chatLog {
-      height: 280px;
+      height: 300px;
       overflow: auto;
       margin-top: 10px;
       padding: 10px;
@@ -130,6 +130,13 @@
     .msg { margin: 0 0 10px 0; }
     .msg .meta { color: #9ca3af; font-size: 0.72rem; }
     .msg .text { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: #9ca3af;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
@@ -159,7 +166,7 @@
           <tr>
             <td>{{ entry.node }}</td>
             <td>{{ entry.service }}</td>
-            <td><a href="{{ entry.url }}" target="_blank">{{ entry.url }}</a></td>
+            <td><a href="{{ entry.url }}" target="_blank" rel="noreferrer">{{ entry.url }}</a></td>
             <td>{{ entry.last_seen }}</td>
           </tr>
           {% endfor %}
@@ -168,9 +175,9 @@
     {% endif %}
 
     <div class="panel">
-      <h2>World Chat</h2>
+      <h2>World Chat + Builder Bot</h2>
       <div class="subtitle" style="margin: 0;">
-        Join rooms like <code>#101</code> or <code>#sanctuary</code>. (Chat history resets on redeploy.)
+        Join rooms like <code>#101</code> or <code>#sanctuary</code>. Bot commands start with <code>!</code> (type <code>!help</code>).
       </div>
 
       <div class="row">
@@ -185,8 +192,16 @@
       <div id="chatLog"></div>
 
       <div class="row">
-        <input id="chatMsg" class="field" placeholder="Message…" style="flex: 1; min-width: 200px;" />
+        <input id="chatMsg" class="field" placeholder="Message… (try: !world create --biome forest --magic high --factions 3)" style="flex: 1; min-width: 220px;" />
         <button id="sendBtn" class="btn">Send</button>
+      </div>
+
+      <div class="hint">
+        Quick starts:<br>
+        <code>!world create --name "Sanctuary-101" --biome forest --magic high --factions 3</code><br>
+        <code>!home add "Marble Foyer" --style gothic --size large</code><br>
+        <code>!home door add --from "Marble Foyer" --to "Library"</code><br>
+        <code>!map</code>
       </div>
     </div>
 
