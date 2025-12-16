@@ -1,149 +1,195 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ghost Sentinel Hub</title>
+  <meta charset="UTF-8">
+  <title>Ghost Sentinel Hub – ACCENET Ghost Network</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 18px; }
-    h1 { margin: 0 0 8px 0; }
-    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; align-items: start; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
-    th { background: #fafafa; position: sticky; top: 0; }
-    .small { font-size: 12px; color: #666; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    input, select { padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
-    button { padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; cursor: pointer; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; }
-    .ok { color: #0a7; border-color: #0a7; }
-    .warn { color: #c60; border-color: #c60; }
-    #chatLog { height: 340px; overflow: auto; border: 1px solid #eee; border-radius: 10px; padding: 10px; background: #fbfbfb; }
-    .msg { margin: 0 0 8px 0; }
-    .msg .meta { color: #666; font-size: 12px; }
-    .msg .text { font-size: 14px; }
+    body {
+      background: #020617;
+      color: #e5e7eb;
+      font-family: "Fira Code", monospace;
+      margin: 0;
+      padding: 0;
+    }
+    .wrap {
+      max-width: 960px;
+      margin: 24px auto;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #22c55e55;
+      box-shadow: 0 0 30px #22c55e33;
+      background: radial-gradient(circle at top, #020617, #000000);
+    }
+    h1 {
+      margin-top: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 1rem;
+      color: #bbf7d0;
+    }
+    .subtitle {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #1f2937;
+    }
+    th {
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.75rem;
+      color: #a5b4fc;
+    }
+    tr:nth-child(even) {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    a {
+      color: #7dd3fc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* --- World Chat (theme-matched, minimal) --- */
+    .panel {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #22c55e22;
+      box-shadow: 0 0 20px #22c55e1a;
+      background: rgba(15, 23, 42, 0.35);
+    }
+    .panel h2 {
+      margin: 0 0 6px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      font-size: 0.85rem;
+      color: #bbf7d0;
+    }
+    code {
+      background: rgba(15, 23, 42, 0.7);
+      padding: 1px 6px;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      color: #bbf7d0;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .field, .btn {
+      font-family: "Fira Code", monospace;
+      font-size: 0.8rem;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.7);
+      color: #e5e7eb;
+      outline: none;
+    }
+    .field::placeholder { color: #64748b; }
+    .btn {
+      cursor: pointer;
+      border-color: #22c55e55;
+      box-shadow: 0 0 14px #22c55e22;
+    }
+    .btn:hover { border-color: #22c55eaa; }
+    .pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      background: rgba(2, 6, 23, 0.6);
+    }
+    .pill.ok { color: #bbf7d0; border-color: #22c55e55; }
+    .pill.warn { color: #fcd34d; border-color: #fcd34d55; }
+
+    #chatLog {
+      height: 280px;
+      overflow: auto;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+    }
+    .msg { margin: 0 0 10px 0; }
+    .msg .meta { color: #9ca3af; font-size: 0.72rem; }
+    .msg .text { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>Ghost Sentinel Hub</h1>
-  <div class="small">Nodes register here when they open Cloudflare tunnels. Now with <b>World Chat</b>.</div>
-
-  <div class="grid" style="margin-top: 14px;">
-    <div class="card">
-      <h2 style="margin: 0 0 8px 0;">Nodes</h2>
-      <div class="small">If your node launcher is running, you should see doors appear here.</div>
-      <div style="max-height: 420px; overflow: auto; margin-top: 10px;">
-        <table>
-          <thead>
-            <tr>
-              <th>Node</th>
-              <th>Service</th>
-              <th>Public URL</th>
-              <th>Last Seen (UTC)</th>
-              <th>Meta</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for n in nodes %}
-            <tr>
-              <td>{{ n.node }}</td>
-              <td>{{ n.service }}</td>
-              <td>
-                {% if n.url %}
-                  <a href="{{ n.url }}" target="_blank" rel="noreferrer">{{ n.url }}</a>
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td>{{ n.last_seen }}</td>
-              <td>{{ n.meta }}</td>
-            </tr>
-            {% endfor %}
-            {% if nodes|length == 0 %}
-            <tr><td colspan="5" class="small">No nodes registered yet.</td></tr>
-            {% endif %}
-          </tbody>
-        </table>
-      </div>
+  <div class="wrap">
+    <h1>Ghost Sentinel Hub • ACCENET Ghost Network</h1>
+    <div class="subtitle">
+      Nodes register here when they open Cloudflare tunnels.
+      Each row is a ghost door into one of your Sentinel worlds.
     </div>
 
-    <div class="card">
-      <h2 style="margin: 0 0 8px 0;">World Chat</h2>
-      <div class="small">Join a room like <span class="pill">#101</span> or create your own.</div>
-
-      <div class="row" style="margin-top: 10px;">
-        <input id="userName" placeholder="Name (e.g. Cohen)" style="flex: 1;" />
-        <select id="roomSel">
-          {% for r in default_rooms %}
-            <option value="{{ r }}">{{ r }}</option>
-          {% endfor %}
-        </select>
-        <button id="joinBtn">Join</button>
-        <button id="leaveBtn">Leave</button>
-      </div>
-
-      <div class="row" style="margin-top: 10px; align-items: center;">
-        <span id="status" class="pill warn">disconnected</span>
-        <span class="small">Room: <b id="roomLabel">—</b></span>
-      </div>
-
-      <div id="chatLog" style="margin-top: 10px;"></div>
-
-      <div class="row" style="margin-top: 10px;">
-        <input id="chatMsg" placeholder="Message…" style="flex: 1;" />
-        <button id="sendBtn">Send</button>
-      </div>
-      <div class="small" style="margin-top: 8px;">
-        Tip: If you redeploy Render, chat history resets (it’s in-memory).
-      </div>
-    </div>
-  </div>
-
-  <div class="card" style="margin-top: 16px;">
-    <h2 style="margin: 0 0 8px 0;">Devices</h2>
-    <form method="post" action="/register-device">
-      <div class="row">
-        <input name="device_name" placeholder="Device name" required />
-        <input name="device_type" placeholder="Type (phone, pc, etc.)" />
-        <input name="mac" placeholder="MAC address" />
-        <input name="api_key" placeholder="API key (optional)" />
-        <input name="notes" placeholder="Notes" style="flex: 1;" />
-        <button type="submit">Save</button>
-      </div>
-    </form>
-
-    <div style="max-height: 280px; overflow: auto; margin-top: 10px;">
+    {% if not nodes %}
+      <p>No nodes have registered yet. Once your local node runs
+      <code>sentinel_remote_access_ghost.py</code> and opens a tunnel,
+      it will appear here.</p>
+    {% else %}
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>MAC</th>
-            <th>Created</th>
+            <th>Node</th>
+            <th>Service</th>
+            <th>Public URL</th>
             <th>Last Seen (UTC)</th>
-            <th>Notes</th>
-            <th>API Key</th>
           </tr>
         </thead>
         <tbody>
-          {% for d in devices %}
+          {% for entry in nodes %}
           <tr>
-            <td>{{ d.name }}</td>
-            <td>{{ d.device_type }}</td>
-            <td>{{ d.mac }}</td>
-            <td>{{ d.created_at }}</td>
-            <td>{{ d.last_seen }}</td>
-            <td>{{ d.notes }}</td>
-            <td>{% if d.api_key_set %}<span class="pill ok">set</span>{% else %}—{% endif %}</td>
+            <td>{{ entry.node }}</td>
+            <td>{{ entry.service }}</td>
+            <td><a href="{{ entry.url }}" target="_blank">{{ entry.url }}</a></td>
+            <td>{{ entry.last_seen }}</td>
           </tr>
           {% endfor %}
-          {% if devices|length == 0 %}
-          <tr><td colspan="7" class="small">No devices registered yet.</td></tr>
-          {% endif %}
         </tbody>
       </table>
+    {% endif %}
+
+    <div class="panel">
+      <h2>World Chat</h2>
+      <div class="subtitle" style="margin: 0;">
+        Join rooms like <code>#101</code> or <code>#sanctuary</code>. (Chat history resets on redeploy.)
+      </div>
+
+      <div class="row">
+        <input id="userName" class="field" placeholder="Name (e.g. Cohen)" style="flex: 1; min-width: 180px;" />
+        <input id="roomName" class="field" value="#101" placeholder="#room" style="width: 160px;" />
+        <button id="joinBtn" class="btn">Join</button>
+        <button id="leaveBtn" class="btn">Leave</button>
+        <span id="status" class="pill warn">disconnected</span>
+        <span class="pill">room: <b id="roomLabel">—</b></span>
+      </div>
+
+      <div id="chatLog"></div>
+
+      <div class="row">
+        <input id="chatMsg" class="field" placeholder="Message…" style="flex: 1; min-width: 200px;" />
+        <button id="sendBtn" class="btn">Send</button>
+      </div>
     </div>
+
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -151,7 +197,6 @@
     const statusEl = document.getElementById("status");
     const roomLabel = document.getElementById("roomLabel");
     const logEl = document.getElementById("chatLog");
-    const roomSel = document.getElementById("roomSel");
 
     let socket = null;
     let currentRoom = null;
@@ -188,20 +233,22 @@
       socket.on("chat_message", (m) => appendMsg(m));
     }
 
-    document.getElementById("joinBtn").addEventListener("click", () => {
+    function joinRoom() {
       const user = (document.getElementById("userName").value || "guest").trim();
-      const room = (roomSel.value || "#101").trim();
+      const room = (document.getElementById("roomName").value || "#101").trim() || "#101";
       ensureSocket();
-      if (currentRoom) socket.emit("leave", {room: currentRoom, user});
+      if (currentRoom) socket.emit("leave", { room: currentRoom, user });
       currentRoom = room;
       roomLabel.textContent = room;
-      socket.emit("join", {room, user});
-    });
+      socket.emit("join", { room, user });
+    }
+
+    document.getElementById("joinBtn").addEventListener("click", joinRoom);
 
     document.getElementById("leaveBtn").addEventListener("click", () => {
       if (!socket || !currentRoom) return;
       const user = (document.getElementById("userName").value || "guest").trim();
-      socket.emit("leave", {room: currentRoom, user});
+      socket.emit("leave", { room: currentRoom, user });
       currentRoom = null;
       roomLabel.textContent = "—";
       logEl.innerHTML = "";
@@ -213,7 +260,7 @@
       const msgBox = document.getElementById("chatMsg");
       const msg = (msgBox.value || "").trim();
       if (!msg) return;
-      socket.emit("send_message", {room: currentRoom, user, msg});
+      socket.emit("send_message", { room: currentRoom, user, msg });
       msgBox.value = "";
       msgBox.focus();
     });

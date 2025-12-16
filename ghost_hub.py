@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """
-Ghost Sentinel Hub (v2) — Nodes Registry + Devices + World Chat (WebSocket)
+Ghost Sentinel Hub — Theme-preserved v2 (Nodes + World Chat)
 
-Deploy on Render with:
-  Start Command:
-    gunicorn -k eventlet -w 1 ghost_hub:app
-
-Environment variables (optional):
-  HUB_API_KEY       -> If set, requires X-API-Key header for /api/chat
-  FLASK_SECRET_KEY  -> Optional secret for sessions
+Render Start Command:
+  gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
 """
-
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_socketio import SocketIO, join_room, leave_room, emit
@@ -35,7 +29,6 @@ NODES_FILE = os.path.join(BASE_DIR, "ghost_nodes.json")
 DEVICES_FILE = os.path.join(BASE_DIR, "ghost_devices.json")
 _data_lock = Lock()
 
-# Chat storage (in-memory; resets on redeploy)
 ROOM_HISTORY_MAX = 200
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
 
@@ -80,63 +73,20 @@ def utc_ts():
 @app.route("/")
 def index():
     nodes = load_nodes()
-    devices = load_devices()
 
     node_list = []
     for node_name, services in nodes.items():
         for svc_name, info in services.items():
-            meta_bits = []
-            if info.get("mac"):
-                meta_bits.append("MAC")
-            if info.get("api_key_set"):
-                meta_bits.append("API key")
-            if info.get("raw") is not None:
-                meta_bits.append("raw")
-            meta = ", ".join(meta_bits) if meta_bits else "—"
             node_list.append(
                 {
                     "node": node_name,
                     "service": svc_name,
                     "url": info.get("url", ""),
                     "last_seen": info.get("last_seen", ""),
-                    "meta": meta,
                 }
             )
     node_list.sort(key=lambda x: (x["node"], x["service"]))
-
-    device_list = []
-    for dev_name, info in devices.items():
-        device_list.append(
-            {
-                "name": dev_name,
-                "device_type": info.get("device_type", ""),
-                "mac": info.get("mac", ""),
-                "created_at": info.get("created_at", ""),
-                "last_seen": info.get("last_seen", ""),
-                "notes": info.get("notes", ""),
-                "api_key_set": bool(info.get("api_key")),
-            }
-        )
-    device_list.sort(key=lambda x: x["name"].lower())
-
-    default_rooms = ["#101", "#sanctuary", "#ops", "#ryoko"]
-
-    return render_template(
-        "ghost_nodes.html",
-        nodes=node_list,
-        devices=device_list,
-        default_rooms=default_rooms,
-    )
-
-
-@app.route("/nodes", methods=["GET"])
-def list_nodes():
-    return jsonify(load_nodes())
-
-
-@app.route("/devices", methods=["GET"])
-def list_devices():
-    return jsonify(load_devices())
+    return render_template("ghost_nodes.html", nodes=node_list)
 
 
 @app.route("/register-node", methods=["POST"])
@@ -180,60 +130,19 @@ def register_node():
 
         if mac:
             devices = load_devices()
-            for dev_name, info in devices.items():
+            changed = False
+            for _, info in devices.items():
                 if info.get("mac") == mac:
                     info["last_seen"] = ts
-            save_devices(devices)
+                    changed = True
+            if changed:
+                save_devices(devices)
 
-    return jsonify(
-        {
-            "ok": True,
-            "name": name,
-            "service": service,
-            "url": url,
-            "mac": mac,
-            "api_key_present": bool(api_key),
-            "last_seen": ts,
-        }
-    )
-
-
-@app.route("/register-device", methods=["POST"])
-def register_device():
-    form = request.form or {}
-    dev_name = (form.get("device_name") or "").strip() or "Unnamed Device"
-    dev_type = (form.get("device_type") or "").strip()
-    mac = (form.get("mac") or "").strip()
-    api_key = (form.get("api_key") or "").strip()
-    notes = (form.get("notes") or "").strip()
-
-    ts = utc_ts()
-
-    with _data_lock:
-        devices = load_devices()
-        existing = devices.get(dev_name, {})
-        created_at = existing.get("created_at") or ts
-        devices[dev_name] = {
-            "device_type": dev_type,
-            "mac": mac,
-            "api_key": api_key,
-            "notes": notes,
-            "created_at": created_at,
-            "last_seen": ts,
-        }
-        save_devices(devices)
-
-    return redirect(url_for("index"))
+    return jsonify({"ok": True, "name": name, "service": service, "url": url, "last_seen": ts})
 
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    required_key = (os.environ.get("HUB_API_KEY") or "").strip()
-    if required_key:
-        got = (request.headers.get("X-API-Key") or "").strip()
-        if got != required_key:
-            return jsonify({"ok": False, "error": "unauthorized"}), 401
-
     if request.is_json:
         data = request.get_json() or {}
     else:
@@ -256,9 +165,7 @@ def on_join(data):
     room = (data or {}).get("room") or "#101"
     user = (data or {}).get("user") or "guest"
     join_room(room)
-
     emit("chat_history", list(_room_history[room]))
-
     notice = {"room": room, "sender": "hub", "msg": f"{user} entered {room}", "ts": utc_ts()}
     _room_history[room].append(notice)
     emit("chat_message", notice, to=room)
@@ -269,7 +176,6 @@ def on_leave(data):
     room = (data or {}).get("room") or "#101"
     user = (data or {}).get("user") or "guest"
     leave_room(room)
-
     notice = {"room": room, "sender": "hub", "msg": f"{user} left {room}", "ts": utc_ts()}
     _room_history[room].append(notice)
     emit("chat_message", notice, to=room)
@@ -282,7 +188,6 @@ def on_send_message(data):
     msg = ((data or {}).get("msg") or "").strip()
     if not msg:
         return
-
     payload = {"room": room, "sender": user, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
     emit("chat_message", payload, to=room)
