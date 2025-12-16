@@ -26,7 +26,6 @@ app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "ghost-sentinel-de
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet",
     ping_interval=25,
     ping_timeout=60,
 )
