@@ -12,7 +12,7 @@
       padding: 0;
     }
     .wrap {
-      max-width: 960px;
+      max-width: 1200px;
       margin: 24px auto;
       padding: 16px;
       border-radius: 12px;
@@ -55,13 +55,19 @@
       color: #7dd3fc;
       text-decoration: none;
     }
-    a:hover {
-      text-decoration: underline;
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 12px;
+      align-items: start;
+      margin-top: 12px;
     }
 
-    /* --- World Chat + Bot (theme-matched) --- */
+    /* Panels */
     .panel {
-      margin-top: 14px;
       padding: 12px;
       border-radius: 12px;
       border: 1px solid #22c55e22;
@@ -75,6 +81,7 @@
       font-size: 0.85rem;
       color: #bbf7d0;
     }
+
     code {
       background: rgba(15, 23, 42, 0.7);
       padding: 1px 6px;
@@ -82,6 +89,7 @@
       border: 1px solid #1f2937;
       color: #bbf7d0;
     }
+
     .row {
       display: flex;
       gap: 8px;
@@ -89,6 +97,7 @@
       align-items: center;
       margin-top: 8px;
     }
+
     .field, .btn {
       font-family: "Fira Code", monospace;
       font-size: 0.8rem;
@@ -100,12 +109,15 @@
       outline: none;
     }
     .field::placeholder { color: #64748b; }
+
     .btn {
       cursor: pointer;
       border-color: #22c55e55;
       box-shadow: 0 0 14px #22c55e22;
+      user-select: none;
     }
     .btn:hover { border-color: #22c55eaa; }
+
     .pill {
       display: inline-block;
       padding: 2px 10px;
@@ -118,8 +130,9 @@
     .pill.ok { color: #bbf7d0; border-color: #22c55e55; }
     .pill.warn { color: #fcd34d; border-color: #fcd34d55; }
 
+    /* Chat log */
     #chatLog {
-      height: 300px;
+      height: 320px;
       overflow: auto;
       margin-top: 10px;
       padding: 10px;
@@ -130,6 +143,76 @@
     .msg { margin: 0 0 10px 0; }
     .msg .meta { color: #9ca3af; font-size: 0.72rem; }
     .msg .text { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; }
+
+    /* Presence list */
+    #userList {
+      max-height: 420px;
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+      padding: 8px;
+      margin-top: 10px;
+    }
+    .userRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .userRow:hover { border-color: #22c55e55; background: rgba(15, 23, 42, 0.55); }
+    .userName { font-size: 0.82rem; color: #e5e7eb; }
+    .userSid { font-size: 0.72rem; color: #64748b; }
+
+    /* DM drawer */
+    #dmPanel {
+      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+      padding: 10px;
+    }
+    #dmTitle { font-size: 0.82rem; color: #bbf7d0; }
+    #dmLog {
+      height: 200px;
+      overflow: auto;
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+    }
+    .dmMeta { color: #9ca3af; font-size: 0.72rem; }
+    .dmText { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 10px; }
+
+    /* Matrix reel */
+    #matrix {
+      height: 120px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.75);
+      overflow: hidden;
+      margin-top: 10px;
+      position: relative;
+    }
+    .fall {
+      position: absolute;
+      top: -20px;
+      white-space: pre;
+      font-size: 14px;
+      opacity: 0.9;
+      color: #bbf7d0;
+      text-shadow: 0 0 10px rgba(34,197,94,0.35);
+      animation: drop linear;
+    }
+    @keyframes drop {
+      from { transform: translateY(-20px); opacity: 0.1; }
+      to { transform: translateY(160px); opacity: 0.95; }
+    }
 
     .hint {
       margin-top: 10px;
@@ -174,49 +257,109 @@
       </table>
     {% endif %}
 
-    <div class="panel">
-      <h2>World Chat + Builder Bot</h2>
-      <div class="subtitle" style="margin: 0;">
-        Join rooms like <code>#101</code> or <code>#sanctuary</code>. Bot commands start with <code>!</code> (type <code>!help</code>).
+    <div class="grid">
+
+      <!-- Left: Lobby chat -->
+      <div class="panel">
+        <h2>Main Hall — Lobby</h2>
+        <div class="subtitle" style="margin: 0;">
+          Single room: <code>{{ main_room }}</code>. Bot commands start with <code>!</code> (type <code>!help</code>). DMs: click a user on the right.
+        </div>
+
+        <div class="row">
+          <input id="userName" class="field" placeholder="Name (e.g. Cohen)" style="flex: 1; min-width: 180px;" />
+          <button id="joinBtn" class="btn">Enter Lobby</button>
+          <span id="status" class="pill warn">disconnected</span>
+          <span class="pill">room: <b id="roomLabel">—</b></span>
+        </div>
+
+        <div id="chatLog"></div>
+
+        <div class="row">
+          <input id="chatMsg" class="field" placeholder='Message… (try: !world create --biome forest --magic high --factions 3)' style="flex: 1; min-width: 220px;" />
+          <button id="sendBtn" class="btn">Send</button>
+        </div>
+
+        <div class="hint">
+          Quick starts:<br>
+          <code>!world create --name "Sanctuary-Lobby" --biome forest --magic high --factions 3</code><br>
+          <code>!home add "Marble Foyer" --style gothic --size large</code><br>
+          <code>!home door add --from "Marble Foyer" --to "Library"</code><br>
+          <code>!map</code>
+          &nbsp; • &nbsp;
+          <code>!users</code>
+        </div>
       </div>
 
-      <div class="row">
-        <input id="userName" class="field" placeholder="Name (e.g. Cohen)" style="flex: 1; min-width: 180px;" />
-        <input id="roomName" class="field" value="#101" placeholder="#room" style="width: 160px;" />
-        <button id="joinBtn" class="btn">Join</button>
-        <button id="leaveBtn" class="btn">Leave</button>
-        <span id="status" class="pill warn">disconnected</span>
-        <span class="pill">room: <b id="roomLabel">—</b></span>
+      <!-- Right: Presence + DM -->
+      <div class="panel">
+        <h2>Joined Users</h2>
+        <div class="subtitle" style="margin: 0;">
+          Click a user to open a private thread. “Sealed” uses browser encryption + rune cipher.
+        </div>
+
+        <div id="userList"></div>
+
+        <div id="dmPanel">
+          <div class="row" style="justify-content: space-between;">
+            <div id="dmTitle">DM: —</div>
+            <span class="pill">me: <b id="meSid">—</b></span>
+          </div>
+
+          <div class="row" style="margin-top: 8px;">
+            <button id="sealBtn" class="btn" style="flex: 1;">Request Seal</button>
+            <span id="sealState" class="pill warn">unsealed</span>
+            <button id="spinBtn" class="btn" title="Regenerate rune glyphset">Spin Runes</button>
+          </div>
+
+          <div id="matrix" title="Rune reel (visual)"></div>
+
+          <div id="dmLog"></div>
+
+          <div class="row">
+            <input id="dmMsg" class="field" placeholder="DM message…" style="flex: 1; min-width: 170px;" />
+            <button id="dmSendBtn" class="btn">Send</button>
+          </div>
+
+          <div class="hint">
+            Sealed mode is end‑to‑end using WebCrypto (ECDH + AES‑GCM). The server only relays ciphertext.
+          </div>
+        </div>
       </div>
 
-      <div id="chatLog"></div>
-
-      <div class="row">
-        <input id="chatMsg" class="field" placeholder="Message… (try: !world create --biome forest --magic high --factions 3)" style="flex: 1; min-width: 220px;" />
-        <button id="sendBtn" class="btn">Send</button>
-      </div>
-
-      <div class="hint">
-        Quick starts:<br>
-        <code>!world create --name "Sanctuary-101" --biome forest --magic high --factions 3</code><br>
-        <code>!home add "Marble Foyer" --style gothic --size large</code><br>
-        <code>!home door add --from "Marble Foyer" --to "Library"</code><br>
-        <code>!map</code>
-      </div>
     </div>
-
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
+    // ===== Lobby chat =====
     const statusEl = document.getElementById("status");
     const roomLabel = document.getElementById("roomLabel");
     const logEl = document.getElementById("chatLog");
 
-    let socket = null;
-    let currentRoom = null;
+    // ===== Presence + DM =====
+    const userListEl = document.getElementById("userList");
+    const dmTitleEl = document.getElementById("dmTitle");
+    const dmLogEl = document.getElementById("dmLog");
+    const meSidEl = document.getElementById("meSid");
+    const sealStateEl = document.getElementById("sealState");
+    const sealBtn = document.getElementById("sealBtn");
+    const spinBtn = document.getElementById("spinBtn");
+    const matrixEl = document.getElementById("matrix");
 
-    function appendMsg(m) {
+    let socket = null;
+    let joined = false;
+    let mainRoom = "{{ main_room }}";
+    let mySid = null;
+
+    let dmPeerSid = null;
+    let dmPeerName = null;
+
+    // Sealed crypto state per peer
+    // peers[peerSid] = { sealed: bool, myPriv: CryptoKey, peerPubJwk: object, aesKey: CryptoKey, glyphset: string[] }
+    const peers = {};
+
+    function appendLobbyMsg(m) {
       const div = document.createElement("div");
       div.className = "msg";
       const meta = document.createElement("div");
@@ -231,51 +374,189 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    function appendDm(kind, metaText, bodyText) {
+      const meta = document.createElement("div");
+      meta.className = "dmMeta";
+      meta.textContent = metaText;
+      const text = document.createElement("div");
+      text.className = "dmText";
+      text.textContent = bodyText;
+      dmLogEl.appendChild(meta);
+      dmLogEl.appendChild(text);
+      dmLogEl.scrollTop = dmLogEl.scrollHeight;
+    }
+
     function setStatus(ok, text) {
       statusEl.textContent = text;
       statusEl.className = "pill " + (ok ? "ok" : "warn");
     }
 
+    function setSealState(sealed, label) {
+      sealStateEl.textContent = label || (sealed ? "sealed" : "unsealed");
+      sealStateEl.className = "pill " + (sealed ? "ok" : "warn");
+    }
+
     function ensureSocket() {
       if (socket) return;
       socket = io();
-      socket.on("connect", () => setStatus(true, "connected"));
+      socket.on("connect", () => {
+        setStatus(true, "connected");
+        mySid = socket.id;
+        meSidEl.textContent = (mySid || "—").slice(0, 6);
+      });
       socket.on("disconnect", () => setStatus(false, "disconnected"));
+
       socket.on("chat_history", (items) => {
         logEl.innerHTML = "";
-        (items || []).forEach(appendMsg);
+        (items || []).forEach(appendLobbyMsg);
       });
-      socket.on("chat_message", (m) => appendMsg(m));
+      socket.on("chat_message", (m) => appendLobbyMsg(m));
+
+      // Presence
+      socket.on("user_list_update", (payload) => {
+        const users = (payload && payload.users) || [];
+        renderUserList(users);
+      });
+
+      // DM history (plaintext only)
+      socket.on("dm_history", (payload) => {
+        if (!payload) return;
+        const items = payload.items || [];
+        // Only show if it matches current peer
+        if (payload.to_sid !== dmPeerSid) return;
+        dmLogEl.innerHTML = "";
+        items.forEach((m) => {
+          appendDm("dm", `[${m.ts}] ${m.from_name} → ${m.to_name}`, m.msg);
+        });
+      });
+
+      socket.on("dm_message", (m) => {
+        // Show only if it's our current DM room
+        if (!m) return;
+        const isCurrent = (dmPeerSid && (m.from_sid === dmPeerSid || m.to_sid === dmPeerSid));
+        if (!isCurrent) return;
+        appendDm("dm", `[${m.ts}] ${m.from_name} → ${m.to_name}`, m.msg);
+      });
+
+      // Sealed relay
+      socket.on("dm_sealed", async (m) => {
+        if (!m) return;
+        const isCurrent = (dmPeerSid && (m.from_sid === dmPeerSid || m.to_sid === dmPeerSid));
+        if (!isCurrent) return;
+
+        const peer = (m.from_sid === mySid) ? m.to_sid : m.from_sid;
+        const st = peers[peer];
+        if (!st || !st.aesKey) {
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, "(sealed message received, but channel not sealed yet)");
+          return;
+        }
+        try {
+          const txt = await decryptSealed(st.aesKey, m.iv_b64, m.ciphertext_b64);
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, txt);
+        } catch (e) {
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, "(could not decrypt — seal mismatch)");
+        }
+      });
+
+      // Seal handshake
+      socket.on("seal_request", async (m) => {
+        if (!m) return;
+        // If it's for us, prompt and accept
+        if (m.to_sid !== mySid) return;
+        // Auto-open DM room context if not open
+        if (!dmPeerSid || dmPeerSid !== m.from_sid) {
+          openDm(m.from_sid, m.from_name);
+        }
+        const ok = confirm(`Seal request from ${m.from_name}. Accept sealed channel?`);
+        if (!ok) return;
+
+        const st = await ensurePeerState(m.from_sid);
+        st.peerPubJwk = m.pubkey_jwk;
+
+        // Create our ECDH keypair, export pub, derive AES
+        const myKeys = await crypto.subtle.generateKey(
+          { name: "ECDH", namedCurve: "P-256" },
+          true,
+          ["deriveKey"]
+        );
+        st.myPriv = myKeys.privateKey;
+
+        const myPubJwk = await crypto.subtle.exportKey("jwk", myKeys.publicKey);
+        await finalizeSealForPeer(m.from_sid);
+
+        socket.emit("seal_accept", { to_sid: m.from_sid, pubkey_jwk: myPubJwk });
+        setSealState(true, "sealed");
+        appendDm("sealed", `[${m.ts}] hub`, "Seal accepted. Rune channel established.");
+      });
+
+      socket.on("seal_accept", async (m) => {
+        if (!m) return;
+        if (m.to_sid !== mySid) return;
+        // This is response to our request
+        const st = await ensurePeerState(m.from_sid);
+        st.peerPubJwk = m.pubkey_jwk;
+        await finalizeSealForPeer(m.from_sid);
+        setSealState(true, "sealed");
+        appendDm("sealed", `[${m.ts}] hub`, "Seal accepted. Rune channel established.");
+      });
     }
 
-    function joinRoom() {
-      const user = (document.getElementById("userName").value || "guest").trim();
-      const room = (document.getElementById("roomName").value || "#101").trim() || "#101";
+    function renderUserList(users) {
+      userListEl.innerHTML = "";
+      const filtered = users.filter(u => u.sid !== mySid);
+      if (!filtered.length) {
+        const p = document.createElement("div");
+        p.className = "subtitle";
+        p.textContent = "No other users online yet.";
+        userListEl.appendChild(p);
+        return;
+      }
+
+      filtered.forEach((u) => {
+        const row = document.createElement("div");
+        row.className = "userRow";
+        const left = document.createElement("div");
+        const nm = document.createElement("div");
+        nm.className = "userName";
+        nm.textContent = u.name || "guest";
+        const sid = document.createElement("div");
+        sid.className = "userSid";
+        sid.textContent = (u.sid || "").slice(0, 6);
+        left.appendChild(nm);
+        left.appendChild(sid);
+
+        const right = document.createElement("span");
+        right.className = "pill ok";
+        right.textContent = "DM";
+
+        row.appendChild(left);
+        row.appendChild(right);
+
+        row.addEventListener("click", () => {
+          openDm(u.sid, u.name);
+        });
+
+        userListEl.appendChild(row);
+      });
+    }
+
+    async function joinLobby() {
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
       ensureSocket();
-      if (currentRoom) socket.emit("leave", { room: currentRoom, user });
-      currentRoom = room;
-      roomLabel.textContent = room;
-      socket.emit("join", { room, user });
+      socket.emit("join", { room: mainRoom, user }); // room ignored server-side
+      joined = true;
+      roomLabel.textContent = mainRoom;
     }
 
-    document.getElementById("joinBtn").addEventListener("click", joinRoom);
-
-    document.getElementById("leaveBtn").addEventListener("click", () => {
-      if (!socket || !currentRoom) return;
-      const user = (document.getElementById("userName").value || "guest").trim();
-      socket.emit("leave", { room: currentRoom, user });
-      currentRoom = null;
-      roomLabel.textContent = "—";
-      logEl.innerHTML = "";
-    });
+    document.getElementById("joinBtn").addEventListener("click", joinLobby);
 
     document.getElementById("sendBtn").addEventListener("click", () => {
-      if (!socket || !currentRoom) return;
-      const user = (document.getElementById("userName").value || "guest").trim();
+      if (!socket || !joined) return;
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
       const msgBox = document.getElementById("chatMsg");
       const msg = (msgBox.value || "").trim();
       if (!msg) return;
-      socket.emit("send_message", { room: currentRoom, user, msg });
+      socket.emit("send_message", { room: mainRoom, user, msg });
       msgBox.value = "";
       msgBox.focus();
     });
@@ -286,6 +567,198 @@
         document.getElementById("sendBtn").click();
       }
     });
+
+    // ===== DM logic =====
+    function openDm(peerSid, peerName) {
+      if (!socket || !joined) {
+        alert("Enter the lobby first.");
+        return;
+      }
+      dmPeerSid = peerSid;
+      dmPeerName = peerName || "guest";
+      dmTitleEl.textContent = `DM: ${dmPeerName} (${(dmPeerSid || "").slice(0, 6)})`;
+      dmLogEl.innerHTML = "";
+      setSealState(false, "unsealed");
+      socket.emit("dm_open", { to_sid: dmPeerSid });
+
+      ensurePeerState(dmPeerSid).then((st) => {
+        // keep UI label in sync
+        setSealState(!!st.aesKey, st.aesKey ? "sealed" : "unsealed");
+        spinRunes(dmPeerSid);
+      });
+    }
+
+    document.getElementById("dmSendBtn").addEventListener("click", async () => {
+      if (!socket || !joined || !dmPeerSid) return;
+      const msgBox = document.getElementById("dmMsg");
+      const txt = (msgBox.value || "").trim();
+      if (!txt) return;
+
+      const st = peers[dmPeerSid];
+      if (st && st.aesKey) {
+        // Sealed send
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const {ciphertextB64, ivB64} = await encryptSealed(st.aesKey, iv, txt);
+        socket.emit("dm_sealed", {
+          to_sid: dmPeerSid,
+          ciphertext_b64: ciphertextB64,
+          iv_b64: ivB64,
+          glyphset: (st.glyphset || []).join("")
+        });
+        appendDm("sealed", `[local] you (sealed) → ${dmPeerName}`, txt);
+      } else {
+        // Plain send
+        socket.emit("dm_send", { to_sid: dmPeerSid, msg: txt });
+        appendDm("dm", `[local] you → ${dmPeerName}`, txt);
+      }
+
+      msgBox.value = "";
+      msgBox.focus();
+    });
+
+    document.getElementById("dmMsg").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("dmSendBtn").click();
+      }
+    });
+
+    // ===== Sealed / Rune cipher =====
+    async function ensurePeerState(peerSid) {
+      if (!peers[peerSid]) {
+        peers[peerSid] = { aesKey: null, myPriv: null, peerPubJwk: null, glyphset: pickGlyphset() };
+      }
+      return peers[peerSid];
+    }
+
+    function pickGlyphset() {
+      // A "slot machine" reel of glyphs (visual). Keep to printable + runes.
+      const pool = ("ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟᛥᛦ" +
+                    "░▒▓█▌▐▀▄▖▗▘▙▚▛▜" +
+                    "⟡⟐⟠⧫◆◇✶✷✸✹✺✦✧" +
+                    "⟁⟟⟊⟁⟙⟠⟒⟓⟔⟕").split("");
+      // Shuffle and slice
+      const shuffled = pool.sort(() => Math.random() - 0.5);
+      return shuffled.slice(0, 32);
+    }
+
+    function spinMatrix(glyphs) {
+      matrixEl.innerHTML = "";
+      const width = matrixEl.getBoundingClientRect().width || 320;
+      const cols = Math.max(10, Math.floor(width / 16));
+      for (let i = 0; i < cols; i++) {
+        const span = document.createElement("div");
+        span.className = "fall";
+        span.style.left = (i * 14 + Math.random() * 6) + "px";
+        span.style.animationDuration = (1.2 + Math.random() * 1.8) + "s";
+        span.style.animationDelay = (Math.random() * 0.4) + "s";
+        const len = 20 + Math.floor(Math.random() * 20);
+        let s = "";
+        for (let j = 0; j < len; j++) s += glyphs[Math.floor(Math.random() * glyphs.length)];
+        span.textContent = s;
+        matrixEl.appendChild(span);
+      }
+      setTimeout(() => { matrixEl.innerHTML = ""; }, 1600);
+    }
+
+    async function spinRunes(peerSid) {
+      const st = await ensurePeerState(peerSid);
+      st.glyphset = pickGlyphset();
+      spinMatrix(st.glyphset);
+      return st.glyphset;
+    }
+
+    spinBtn.addEventListener("click", async () => {
+      if (!dmPeerSid) return;
+      await spinRunes(dmPeerSid);
+      appendDm("sealed", "[hub]", "Runes regenerated (visual map refreshed).");
+    });
+
+    sealBtn.addEventListener("click", async () => {
+      if (!socket || !joined || !dmPeerSid) return;
+
+      const st = await ensurePeerState(dmPeerSid);
+
+      // If already sealed, allow "reset"
+      if (st.aesKey) {
+        const ok = confirm("Seal already active. Break seal (reset) for this DM?");
+        if (!ok) return;
+        st.aesKey = null;
+        st.myPriv = null;
+        st.peerPubJwk = null;
+        setSealState(false, "unsealed");
+        appendDm("sealed", "[hub]", "Seal broken. Channel is now plaintext.");
+        return;
+      }
+
+      // Create ephemeral ECDH and send pub key to peer
+      const myKeys = await crypto.subtle.generateKey(
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        ["deriveKey"]
+      );
+      st.myPriv = myKeys.privateKey;
+      const myPubJwk = await crypto.subtle.exportKey("jwk", myKeys.publicKey);
+
+      await spinRunes(dmPeerSid);
+      socket.emit("seal_request", { to_sid: dmPeerSid, pubkey_jwk: myPubJwk });
+      setSealState(false, "pending");
+      appendDm("sealed", "[hub]", "Seal requested. Waiting for acceptance…");
+    });
+
+    async function finalizeSealForPeer(peerSid) {
+      const st = await ensurePeerState(peerSid);
+      if (!st.myPriv || !st.peerPubJwk) return;
+
+      const peerPub = await crypto.subtle.importKey(
+        "jwk",
+        st.peerPubJwk,
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        []
+      );
+
+      // Derive an AES-GCM key
+      const aesKey = await crypto.subtle.deriveKey(
+        { name: "ECDH", public: peerPub },
+        st.myPriv,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+
+      st.aesKey = aesKey;
+      return aesKey;
+    }
+
+    function bufToB64(buf) {
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    async function encryptSealed(aesKey, ivU8, plaintext) {
+      const enc = new TextEncoder();
+      const pt = enc.encode(plaintext);
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivU8 }, aesKey, pt);
+      return { ciphertextB64: bufToB64(ct), ivB64: bufToB64(ivU8) };
+    }
+
+    async function decryptSealed(aesKey, ivB64, ciphertextB64) {
+      const iv = new Uint8Array(b64ToBuf(ivB64));
+      const ct = b64ToBuf(ciphertextB64);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, ct);
+      const dec = new TextDecoder();
+      return dec.decode(pt);
+    }
   </script>
 </body>
 </html>

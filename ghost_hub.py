@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """
-Ghost Sentinel Hub — Theme-preserved v3 (Nodes + World Chat + Builder Bot)
+Ghost Sentinel Hub — Lobby + Presence + DMs + Sealed Rune Cipher (v4)
 
 Render Start Command:
   gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
 
-Bot commands (in chat):
-  !help
-  !world create --biome forest --magic high --factions 3 [--name "World Name"]
-  !home add "Room Name" [--style gothic] [--size large]
-  !home door add --from "Room A" --to "Room B"
-  !map
-  !status
-  !reset
+What’s new in v4:
+- Single main room (#lobby) — no public multi-room UI.
+- Online user list (presence) with sidebar updates.
+- Direct Messages (DMs), with optional "Sealed" mode:
+  - Uses browser WebCrypto (ECDH + AES-GCM) for end‑to‑end encryption.
+  - Server stores/relays only ciphertext for sealed messages.
+- Keeps the existing Nodes registry and Builder Bot (now bound to #lobby).
 
 Safe by design:
 - Text-only bot; no SSH, no remote execution.
-- Per-room state saved to world_state.json.
+- No secret material persisted server-side.
 """
 
 from flask import Flask, request, jsonify, render_template
@@ -27,6 +26,7 @@ import os
 from threading import Lock
 from collections import defaultdict, deque
 import shlex
+from typing import Dict, Any, Tuple
 
 app = Flask(__name__, template_folder="templates")
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "ghost-sentinel-dev-key")
@@ -44,9 +44,19 @@ STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
 
 _data_lock = Lock()
 _state_lock = Lock()
+_presence_lock = Lock()
+_dm_lock = Lock()
 
-ROOM_HISTORY_MAX = 200
+MAIN_ROOM = "#lobby"
+ROOM_HISTORY_MAX = 250
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
+
+# Presence: sid -> {"sid":..., "name":..., "room":..., "last_seen":...}
+_online: Dict[str, Dict[str, Any]] = {}
+
+# DM history (unencrypted only). Key is tuple(sorted([sidA, sidB])).
+DM_HISTORY_MAX = 200
+_dm_history = defaultdict(lambda: deque(maxlen=DM_HISTORY_MAX))
 
 BOT_NAME = "ghost-bot"
 
@@ -107,7 +117,7 @@ def save_state_all(data):
 
 
 def get_room_state(room: str):
-    room = room or "#101"
+    room = room or MAIN_ROOM
     with _state_lock:
         all_state = load_state_all()
         st = all_state.get(room)
@@ -119,7 +129,7 @@ def get_room_state(room: str):
 
 
 def set_room_state(room: str, st: dict):
-    room = room or "#101"
+    room = room or MAIN_ROOM
     with _state_lock:
         all_state = load_state_all()
         st["updated_at"] = utc_ts()
@@ -135,9 +145,10 @@ HELP_TEXT = """Commands:
   !map
   !status
   !reset
+  !users
 
 Examples:
-  !world create --name "Sanctuary-101" --biome forest --magic high --factions 3
+  !world create --name "Sanctuary-Lobby" --biome forest --magic high --factions 3
   !home add "Marble Foyer" --style gothic --size large
   !home door add --from "Marble Foyer" --to "Library"
   !map
@@ -271,7 +282,19 @@ def _map(room: str):
 def _reset(room: str):
     st = _default_state()
     set_room_state(room, st)
-    return "🧹 Reset complete. This room’s world + home state is now blank."
+    return "🧹 Reset complete. The lobby’s world + home state is now blank."
+
+
+def _users(room: str):
+    with _presence_lock:
+        users = list(_online.values())
+    users.sort(key=lambda u: (u.get("name", "").lower(), u.get("sid", "")))
+    lines = [f"Online users in {room}: {len(users)}"]
+    for u in users[:60]:
+        nm = u.get("name", "guest")
+        sid = u.get("sid", "")[:6]
+        lines.append(f"- {nm} ({sid})")
+    return "\n".join(lines)
 
 
 def maybe_run_bot(room: str, user: str, msg: str):
@@ -322,8 +345,27 @@ def maybe_run_bot(room: str, user: str, msg: str):
     if cmd == "!reset":
         _bot_emit(room, _reset(room))
         return
+    if cmd == "!users":
+        _bot_emit(room, _users(room))
+        return
 
     _bot_emit(room, "Unknown command. Try: !help")
+
+
+def _emit_user_list():
+    with _presence_lock:
+        users = [{"sid": u["sid"], "name": u.get("name", "guest"), "room": u.get("room", MAIN_ROOM)} for u in _online.values()]
+    users.sort(key=lambda x: (x["name"].lower(), x["sid"]))
+    socketio.emit("user_list_update", {"room": MAIN_ROOM, "users": users})
+
+
+def _dm_key(a: str, b: str) -> Tuple[str, str]:
+    return tuple(sorted([a, b]))
+
+
+def _dm_room(a: str, b: str) -> str:
+    x, y = _dm_key(a, b)
+    return f"dm:{x}:{y}"
 
 
 @app.route("/")
@@ -341,7 +383,7 @@ def index():
                 }
             )
     node_list.sort(key=lambda x: (x["node"], x["service"]))
-    return render_template("ghost_nodes.html", nodes=node_list)
+    return render_template("ghost_nodes.html", nodes=node_list, main_room=MAIN_ROOM)
 
 
 @app.route("/register-node", methods=["POST"])
@@ -383,12 +425,13 @@ def register_node():
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
+    # Force everything into the lobby
     if request.is_json:
         data = request.get_json() or {}
     else:
         data = request.form or {}
 
-    room = (data.get("room") or "").strip() or "#101"
+    room = MAIN_ROOM
     sender = (data.get("sender") or "").strip() or "node"
     msg = (data.get("msg") or "").strip()
     if not msg:
@@ -402,36 +445,53 @@ def api_chat():
     return jsonify({"ok": True})
 
 
+@socketio.on("connect")
+def on_connect():
+    # sid exists here; name set on join
+    sid = request.sid
+    with _presence_lock:
+        _online[sid] = {"sid": sid, "name": "guest", "room": MAIN_ROOM, "last_seen": utc_ts()}
+    _emit_user_list()
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    sid = request.sid
+    with _presence_lock:
+        _online.pop(sid, None)
+    _emit_user_list()
+
+
 @socketio.on("join")
 def on_join(data):
-    room = (data or {}).get("room") or "#101"
+    # Ignore requested room; always lobby
+    sid = request.sid
     user = (data or {}).get("user") or "guest"
-    join_room(room)
+    user = (user or "guest").strip()[:48] or "guest"
 
-    emit("chat_history", list(_room_history[room]))
+    join_room(MAIN_ROOM)
 
-    notice = {"room": room, "sender": "hub", "msg": f"{user} entered {room}", "ts": utc_ts()}
-    _room_history[room].append(notice)
-    emit("chat_message", notice, to=room)
+    with _presence_lock:
+        if sid in _online:
+            _online[sid]["name"] = user
+            _online[sid]["room"] = MAIN_ROOM
+            _online[sid]["last_seen"] = utc_ts()
 
-    hint = {"room": room, "sender": BOT_NAME, "msg": "Type !help for builder commands.", "ts": utc_ts()}
-    _room_history[room].append(hint)
-    emit("chat_message", hint, to=room)
+    emit("chat_history", list(_room_history[MAIN_ROOM]))
+    _emit_user_list()
 
+    notice = {"room": MAIN_ROOM, "sender": "hub", "msg": f"{user} entered {MAIN_ROOM}", "ts": utc_ts()}
+    _room_history[MAIN_ROOM].append(notice)
+    emit("chat_message", notice, to=MAIN_ROOM)
 
-@socketio.on("leave")
-def on_leave(data):
-    room = (data or {}).get("room") or "#101"
-    user = (data or {}).get("user") or "guest"
-    leave_room(room)
-    notice = {"room": room, "sender": "hub", "msg": f"{user} left {room}", "ts": utc_ts()}
-    _room_history[room].append(notice)
-    emit("chat_message", notice, to=room)
+    hint = {"room": MAIN_ROOM, "sender": BOT_NAME, "msg": "Type !help for builder commands. DMs: click a user on the right.", "ts": utc_ts()}
+    _room_history[MAIN_ROOM].append(hint)
+    emit("chat_message", hint, to=MAIN_ROOM)
 
 
 @socketio.on("send_message")
 def on_send_message(data):
-    room = (data or {}).get("room") or "#101"
+    room = MAIN_ROOM
     user = (data or {}).get("user") or "guest"
     msg = ((data or {}).get("msg") or "").strip()
     if not msg:
@@ -442,6 +502,142 @@ def on_send_message(data):
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, user, msg)
+
+
+@socketio.on("dm_open")
+def on_dm_open(data):
+    """Join a DM room and return history (plaintext only)."""
+    sid = request.sid
+    other = (data or {}).get("to_sid") or ""
+    other = other.strip()
+    if not other or other == sid:
+        return
+
+    dm_room = _dm_room(sid, other)
+    join_room(dm_room)
+
+    # Send plaintext history (sealed messages are client-side only)
+    key = _dm_key(sid, other)
+    with _dm_lock:
+        hist = list(_dm_history[key])
+
+    emit("dm_history", {"to_sid": other, "items": hist})
+
+
+@socketio.on("dm_send")
+def on_dm_send(data):
+    """Plaintext DM (server stores small rolling history)."""
+    sid = request.sid
+    to_sid = (data or {}).get("to_sid") or ""
+    to_sid = to_sid.strip()
+    msg = ((data or {}).get("msg") or "").strip()
+    if not to_sid or to_sid == sid or not msg:
+        return
+
+    with _presence_lock:
+        sender_name = _online.get(sid, {}).get("name", "guest")
+        to_name = _online.get(to_sid, {}).get("name", "guest")
+
+    payload = {
+        "kind": "dm",
+        "from_sid": sid,
+        "from_name": sender_name,
+        "to_sid": to_sid,
+        "to_name": to_name,
+        "msg": msg,
+        "ts": utc_ts(),
+    }
+
+    key = _dm_key(sid, to_sid)
+    with _dm_lock:
+        _dm_history[key].append(payload)
+
+    dm_room = _dm_room(sid, to_sid)
+    socketio.emit("dm_message", payload, to=dm_room)
+
+
+@socketio.on("dm_sealed")
+def on_dm_sealed(data):
+    """
+    Sealed DM relay:
+    The server does NOT decrypt. It just relays ciphertext+iv+meta.
+    """
+    sid = request.sid
+    to_sid = (data or {}).get("to_sid") or ""
+    to_sid = to_sid.strip()
+    if not to_sid or to_sid == sid:
+        return
+
+    with _presence_lock:
+        sender_name = _online.get(sid, {}).get("name", "guest")
+        to_name = _online.get(to_sid, {}).get("name", "guest")
+
+    payload = {
+        "kind": "sealed",
+        "from_sid": sid,
+        "from_name": sender_name,
+        "to_sid": to_sid,
+        "to_name": to_name,
+        "ciphertext_b64": (data or {}).get("ciphertext_b64"),
+        "iv_b64": (data or {}).get("iv_b64"),
+        "glyphset": (data or {}).get("glyphset"),
+        "ts": utc_ts(),
+    }
+
+    dm_room = _dm_room(sid, to_sid)
+    socketio.emit("dm_sealed", payload, to=dm_room)
+
+
+@socketio.on("seal_request")
+def on_seal_request(data):
+    """
+    ECDH handshake message relay (public key only).
+    """
+    sid = request.sid
+    to_sid = (data or {}).get("to_sid") or ""
+    to_sid = to_sid.strip()
+    if not to_sid or to_sid == sid:
+        return
+
+    with _presence_lock:
+        sender_name = _online.get(sid, {}).get("name", "guest")
+
+    payload = {
+        "from_sid": sid,
+        "from_name": sender_name,
+        "to_sid": to_sid,
+        "pubkey_jwk": (data or {}).get("pubkey_jwk"),
+        "ts": utc_ts(),
+    }
+
+    dm_room = _dm_room(sid, to_sid)
+    socketio.emit("seal_request", payload, to=dm_room)
+
+
+@socketio.on("seal_accept")
+def on_seal_accept(data):
+    """
+    ECDH handshake accept relay (public key only).
+    """
+    sid = request.sid
+    to_sid = (data or {}).get("to_sid") or ""
+    to_sid = to_sid.strip()
+    if not to_sid or to_sid == sid:
+        return
+
+    with _presence_lock:
+        sender_name = _online.get(sid, {}).get("name", "guest")
+
+    payload = {
+        "from_sid": sid,
+        "from_name": sender_name,
+        "to_sid": to_sid,
+        "pubkey_jwk": (data or {}).get("pubkey_jwk"),
+        "ts": utc_ts(),
+    }
+
+    dm_room = _dm_room(sid, to_sid)
+    socketio.emit("seal_accept", payload, to=dm_room)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,7 @@
+Render start command (unchanged):
+gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+
+Files:
+- ghost_hub.py
+- templates/ghost_nodes.html
+- requirements.txt
