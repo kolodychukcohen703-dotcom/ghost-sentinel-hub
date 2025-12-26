@@ -445,6 +445,10 @@ def api_chat():
     return jsonify({"ok": True})
 
 
+@socketio.on("ping_check")
+def on_ping_check(data=None):
+    emit("pong_check", {"ts": utc_ts()})
+
 @socketio.on("connect")
 def on_connect():
     # sid exists here; name set on join

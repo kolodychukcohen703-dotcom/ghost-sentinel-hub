@@ -271,6 +271,7 @@
           <button id="joinBtn" class="btn">Enter Lobby</button>
           <span id="status" class="pill warn">disconnected</span>
           <span class="pill">room: <b id="roomLabel">—</b></span>
+          <span class="pill">ping: <b id="pingLabel">—</b> ms</span>
         </div>
 
         <div id="chatLog"></div>
@@ -342,6 +343,11 @@
     const dmTitleEl = document.getElementById("dmTitle");
     const dmLogEl = document.getElementById("dmLog");
     const meSidEl = document.getElementById("meSid");
+    const pingLabel = document.getElementById("pingLabel");
+
+    let lastUserName = localStorage.getItem("ghosthub_username") || "";
+    let autoJoinWanted = false;
+    let pingTimer = null;
     const sealStateEl = document.getElementById("sealState");
     const sealBtn = document.getElementById("sealBtn");
     const spinBtn = document.getElementById("spinBtn");
@@ -351,6 +357,11 @@
     let joined = false;
     let mainRoom = "{{ main_room }}";
     let mySid = null;
+
+    // Restore last used name
+    if (lastUserName) {
+      document.getElementById("userName").value = lastUserName;
+    }
 
     let dmPeerSid = null;
     let dmPeerName = null;
@@ -403,8 +414,25 @@
         setStatus(true, "connected");
         mySid = socket.id;
         meSidEl.textContent = (mySid || "—").slice(0, 6);
+
+        // Auto-join on refresh/reconnect if previously joined
+        const stored = (localStorage.getItem("ghosthub_username") || "").trim();
+        if (stored) {
+          document.getElementById("userName").value = stored;
+        }
+        if (stored && (autoJoinWanted || joined || localStorage.getItem("ghosthub_autojoin") === "1")) {
+          autoJoinWanted = true;
+          socket.emit("join", { room: mainRoom, user: stored });
+          joined = true;
+          roomLabel.textContent = mainRoom;
+        }
+
+        startPingLoop();
       });
-      socket.on("disconnect", () => setStatus(false, "disconnected"));
+      socket.on("disconnect", () => {
+        setStatus(false, "disconnected");
+        if (pingLabel) pingLabel.textContent = "—";
+      });
 
       socket.on("chat_history", (items) => {
         logEl.innerHTML = "";
@@ -542,6 +570,10 @@
 
     async function joinLobby() {
       const user = (document.getElementById("userName").value || "guest").trim() || "guest";
+      localStorage.setItem("ghosthub_username", user);
+      localStorage.setItem("ghosthub_autojoin", "1");
+      autoJoinWanted = true;
+
       ensureSocket();
       socket.emit("join", { room: mainRoom, user }); // room ignored server-side
       joined = true;
@@ -745,7 +777,29 @@
       return bytes.buffer;
     }
 
-    async function encryptSealed(aesKey, ivU8, plaintext) {
+    
+    function startPingLoop() {
+      if (!socket || !pingLabel) return;
+      if (pingTimer) clearInterval(pingTimer);
+
+      pingTimer = setInterval(() => {
+        if (!socket.connected) {
+          pingLabel.textContent = "—";
+          return;
+        }
+        const t0 = performance.now();
+        socket.timeout(3000).emit("ping_check", {}, (err) => {
+          if (err) {
+            pingLabel.textContent = "timeout";
+            return;
+          }
+          const ms = Math.round(performance.now() - t0);
+          pingLabel.textContent = String(ms);
+        });
+      }, 5000);
+    }
+
+async function encryptSealed(aesKey, ivU8, plaintext) {
       const enc = new TextEncoder();
       const pt = enc.encode(plaintext);
       const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivU8 }, aesKey, pt);

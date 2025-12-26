@@ -1,7 +1,6 @@
-Render start command (unchanged):
-gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+Ghost Sentinel Hub v4.1
+- Auto-rejoin lobby on refresh/reconnect (remembers username)
+- Ping indicator (RTT) every 5s
 
-Files:
-- ghost_hub.py
-- templates/ghost_nodes.html
-- requirements.txt
+Render start command:
+gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
