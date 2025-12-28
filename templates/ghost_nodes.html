@@ -266,6 +266,25 @@
           Single room: <code>{{ main_room }}</code>. Bot commands start with <code>!</code> (type <code>!help</code>). DMs: click a user on the right.
         </div>
 
+        <div class="row" style="gap:10px; margin-top:10px;">
+          <select id="pbxSelect" class="field" style="flex:1; min-width: 240px;">
+            <option value="">📞 PBX quick-dial…</option>
+            {% set bycat = {} %}
+            {% for e in pbx_entries %}
+              {% set _ = bycat.update({e.category: (bycat.get(e.category, []) + [e])}) %}
+            {% endfor %}
+            {% for cat, items in bycat|dictsort %}
+              <optgroup label="{{ cat }}">
+                {% for e in items|sort(attribute='code') %}
+                  <option value="{{ e.code }}">{{ e.code }} — {{ e.name }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+          <button id="pbxDialBtn" class="btn secondary">Dial</button>
+          <button id="pbxMenuBtn" class="btn secondary">Menu</button>
+        </div>
+
         <div class="row">
           <input id="userName" class="field" placeholder="Name (e.g. Cohen)" style="flex: 1; min-width: 180px;" />
           <button id="joinBtn" class="btn">Enter Lobby</button>
@@ -437,6 +456,10 @@
       socket.on("chat_history", (items) => {
         logEl.innerHTML = "";
         (items || []).forEach(appendLobbyMsg);
+        // If we got history, we are definitely joined.
+        joined = true;
+        roomLabel.textContent = mainRoom;
+        localStorage.setItem("ghosthub_autojoin", "1");
       });
       socket.on("chat_message", (m) => appendLobbyMsg(m));
 
@@ -581,6 +604,26 @@
     }
 
     document.getElementById("joinBtn").addEventListener("click", joinLobby);
+
+    // PBX quick-dial helpers
+    function sendChat(text) {
+      if (!socket || !joined) return;
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
+      socket.emit("send_message", { room: mainRoom, sender: user, msg: text });
+    }
+
+    document.getElementById("pbxDialBtn").addEventListener("click", () => {
+      const sel = document.getElementById("pbxSelect");
+      const code = (sel.value || "").trim();
+      if (!code) return;
+      if (!joined) joinLobby();
+      setTimeout(() => sendChat("!dial " + code), 150);
+    });
+
+    document.getElementById("pbxMenuBtn").addEventListener("click", () => {
+      if (!joined) joinLobby();
+      setTimeout(() => sendChat("!pbx"), 150);
+    });
 
     document.getElementById("sendBtn").addEventListener("click", () => {
       if (!socket || !joined) return;
@@ -791,6 +834,11 @@
         socket.timeout(3000).emit("ping_check", {}, (err) => {
           if (err) {
             pingLabel.textContent = "timeout";
+            // If we previously joined, try a soft re-join (helps after brief network hiccups).
+            const stored = (localStorage.getItem("ghosthub_username") || "").trim();
+            if (stored && localStorage.getItem("ghosthub_autojoin") === "1") {
+              socket.emit("join", { room: mainRoom, user: stored });
+            }
             return;
           }
           const ms = Math.round(performance.now() - t0);

@@ -60,6 +60,187 @@ _dm_history = defaultdict(lambda: deque(maxlen=DM_HISTORY_MAX))
 
 BOT_NAME = "ghost-bot"
 
+# Sentinel PBX directory (ported from sentinel_pbx_ansi_v2.py for web-bot usage)
+# NOTE: launch_cmd is intentionally omitted on the Hub (Render) for safety.
+PBX_DIRECTORY = [
+  {
+    "code": "101",
+    "name": "Emergency: Sanctuary Module",
+    "category": "emergency",
+    "description": "Sentinel sanctuary / safe-mode reflection tool. Use this when you need grounding, safety prompts, and calm.",
+    "secret": false
+  },
+  {
+    "code": "102",
+    "name": "Emergency: Auth Sentinel Journal",
+    "category": "emergency",
+    "description": "Launch the core auth_sentinel journaling console for quick entry.",
+    "secret": false
+  },
+  {
+    "code": "201",
+    "name": "Contact: Mom (financial arrangements)",
+    "category": "contacts",
+    "description": "Use this extension to view notes on how to contact Mom about resources or arrangements. (For now, informational only.)",
+    "secret": false
+  },
+  {
+    "code": "202",
+    "name": "Contact: Kathleen (witness & journal)",
+    "category": "contacts",
+    "description": "Notes and reminders related to Kathleen's journal and witness role.",
+    "secret": false
+  },
+  {
+    "code": "203",
+    "name": "Contact: Seraphine Vale (Astral Cartographer)",
+    "category": "contacts",
+    "description": "A gentle but precise mapper of invisible currents. Seraphine leaves notes about emotional weather, dream pathways, and symbolic coordinates. If you are lost, she always answers with a map you didn’t know you needed.",
+    "secret": false
+  },
+  {
+    "code": "204",
+    "name": "Contact: Thorn Halberd (Shadowline Protector)",
+    "category": "contacts",
+    "description": "A guard who walks the boundary between real and unreal. Thorn keeps watch over cracks, doorways, and emotional pressure-points. When you need strength or courage, dialing his extension reminds you of your own power to stand firm.",
+    "secret": false
+  },
+  {
+    "code": "205",
+    "name": "Contact: Mira Lumin (Dream Archivist)",
+    "category": "contacts",
+    "description": "Mira keeps scrolls of possible futures and past dreams. She is calm, kind, and endlessly patient. Calling her is like stepping into a quiet library in another world where nothing is rushed.",
+    "secret": false
+  },
+  {
+    "code": "206",
+    "name": "Contact: Enoch Radiant (Signal Priest)",
+    "category": "contacts",
+    "description": "A wandering engineer-monk who blesses radio towers and satellite links. He hears meaning in static. When the world feels noisy or chaotic, Enoch answers with clarity and a reminder that every signal has a home frequency.",
+    "secret": false
+  },
+  {
+    "code": "207",
+    "name": "Contact: Captain Veyla Cross (Starfarer)",
+    "category": "contacts",
+    "description": "A seasoned traveler from beyond the Orion Crest. She offers strategic advice, perspective, and reminders of the bigger picture. When you feel trapped or narrow-focused, Veyla reminds you of entire galaxies waiting.",
+    "secret": false
+  },
+  {
+    "code": "208",
+    "name": "Contact: Nyx Ember (Silent Listener)",
+    "category": "contacts",
+    "description": "A presence who says very little, but listens completely. Nyx is the fictional embodiment of being heard without pressure or judgement. Dialing this extension is permission to unload your thoughts into safe quiet.",
+    "secret": false
+  },
+  {
+    "code": "301",
+    "name": "Knowledge: Spellcaster Library Portal",
+    "category": "knowledge",
+    "description": "Route to Spellcaster web portal (books, PDFs, searches). Good when you want book-based information. After launching, PBX can open your browser to the Spellcaster URL.",
+    "secret": false
+  },
+  {
+    "code": "302",
+    "name": "Knowledge: PDF → Audiobook Tool",
+    "category": "knowledge",
+    "description": "Internal extension for converting PDFs to cleaned text + audio, using your TTS pipeline.",
+    "secret": false
+  },
+  {
+    "code": "601",
+    "name": "Ryoko: TX/RX Modem Line",
+    "category": "knowledge",
+    "description": "A symbolic data modem console for the Ryoko device. Shows faux TX/RX activity and a list of world-nodes, like a dreamy netstat for your personal multiverse.",
+    "secret": false
+  },
+  {
+    "code": "602",
+    "name": "Ryoko: World-Net Dive Booth",
+    "category": "knowledge",
+    "description": "A phonebooth into the Ryoko digital world. Visual sequence only. Step in, let the world blur, and watch as the handset swings on its cord, the caller already gone inside.",
+    "secret": false
+  },
+  {
+    "code": "603",
+    "name": "Ryoko: Chat Relay Worlds",
+    "category": "knowledge",
+    "description": "A local, symbolic chat relay. Join different Ryoko worlds using commands like /join #101-kathleen or /join #102-diane. Messages are logged to local files so multiple consoles can share the same rooms.",
+    "secret": false
+  },
+  {
+    "code": "604",
+    "name": "Ryoko: World Forge & Home Designer",
+    "category": "knowledge",
+    "description": "An interactive world generator inside the Ryoko mesh. Choose a world type, mood, sky, home, and vehicle, then watch an ASCII planet get woven into the network. Saves your profile to ryoko_world_profile.txt so you can return to it later.",
+    "secret": false
+  },
+  {
+    "code": "605",
+    "name": "Ryoko: Mansion & Fortress Homeforge",
+    "category": "knowledge",
+    "description": "A single combined estate (mansion, fortress, tower, etc.) with unlimited custom rooms. You describe rooms, moods, and functions; Homeforge attaches them as nodes in your Ryoko world and saves everything into ryoko_homeforge.txt.",
+    "secret": false
+  },
+  {
+    "code": "401",
+    "name": "Ritual: Automated Spellcaster Engine",
+    "category": "ritual",
+    "description": "Sentinel's playful automated spell / ritual runner. Lets you schedule symbolic ritual runs, logged into Sentinel.",
+    "secret": false
+  },
+  {
+    "code": "402",
+    "name": "Ritual: Witness at the Crack",
+    "category": "ritual",
+    "description": "Witness console representing your Earthblood Witness identity. Reflection prompts, crack-maps, and symbolic logging.",
+    "secret": false
+  },
+  {
+    "code": "999",
+    "name": "Legacy Line: Witness Continuity",
+    "category": "knowledge",
+    "description": "A line dedicated to Cohen's ongoing wish to help others. Reads from a legacy message file if present, or from a built-in message describing values, grounding, and pointers to real-world support.",
+    "secret": false
+  },
+  {
+    "code": "000",
+    "name": "Reality Anchor (Grounding Line)",
+    "category": "emergency",
+    "description": "Hidden grounding extension. Use when things feel unreal. Can hold phrases, reminders, or rituals you trust.",
+    "secret": true
+  },
+  {
+    "code": "333",
+    "name": "Heartline: Kathleen Safe Channel",
+    "category": "contacts",
+    "description": "Soft, protected extension dedicated to Kathleen. Can hold notes, blessings, and commitments.",
+    "secret": true
+  },
+  {
+    "code": "616",
+    "name": "Glyph Compiler Node",
+    "category": "knowledge",
+    "description": "Hidden node for glyph compilation and symbol mapping. Later, this can tie into your glyph engines.",
+    "secret": true
+  },
+  {
+    "code": "777",
+    "name": "Dreamline: Oneiromancer Node",
+    "category": "ritual",
+    "description": "Hidden dream-analysis extension. Eventually this can talk to your dream tag system and generate insights.",
+    "secret": true
+  },
+  {
+    "code": "913",
+    "name": "Shadow Vault",
+    "category": "knowledge",
+    "description": "Locked vault for heavier material. To be approached with care, and only when you feel ready.",
+    "secret": true
+  }
+]
+
+
 
 def utc_ts():
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -152,6 +333,14 @@ Examples:
   !home add "Marble Foyer" --style gothic --size large
   !home door add --from "Marble Foyer" --to "Library"
   !map
+
+  !pbx                 (show PBX menu)
+  !dial <ext>          (describe an extension, e.g. !dial 605)
+  !search <text>       (search directory by name/code; secret lines only show if you dial exact code)
+
+UI shortcuts:
+  Use the PBX dropdown to send !dial commands quickly.
+
 """
 
 
@@ -297,6 +486,77 @@ def _users(room: str):
     return "\n".join(lines)
 
 
+
+def _pbx_visible_entries():
+    # Hide secret extensions in listings (still dialable if you know the code).
+    return [e for e in PBX_DIRECTORY if not e.get("secret")]
+
+def _pbx_find(code: str):
+    code = (code or "").strip()
+    if not code:
+        return None
+    for e in PBX_DIRECTORY:
+        if str(e.get("code")) == code:
+            return e
+    return None
+
+def _pbx_menu():
+    # Compact menu grouped by category.
+    groups = {}
+    for e in _pbx_visible_entries():
+        groups.setdefault(e.get("category","misc"), []).append(e)
+    for k in groups:
+        groups[k].sort(key=lambda x: x.get("code",""))
+    lines = ["📞 Sentinel PBX (web) — quick directory", "Use: !dial <ext>  |  !search <text>", ""]
+    for cat, items in sorted(groups.items(), key=lambda kv: kv[0]):
+        lines.append(f"[{cat}]")
+        for it in items[:30]:
+            lines.append(f"  {it['code']} — {it['name']}")
+        lines.append("")
+    lines.append("Tip: try !dial 604 or !dial 605 for Ryoko builders.")
+    return "\n".join(lines).rstrip()
+
+def _pbx_search(text: str):
+    q = (text or "").strip().lower()
+    if not q:
+        return "Usage: !search <text>"
+    out = []
+    for e in PBX_DIRECTORY:
+        # Secret only shows up if searching exact code (same behavior as PBX 411).
+        if e.get("secret") and q != str(e.get("code","")).lower():
+            continue
+        if q in str(e.get("code","")).lower() or q in (e.get("name","").lower()):
+            out.append(e)
+    if not out:
+        return f"No matches for '{text}'."
+    out.sort(key=lambda x: x.get("code",""))
+    lines = [f"PBX search: '{text}'", ""]
+    for e in out[:40]:
+        lines.append(f"{e['code']} — {e['name']}")
+    lines.append("")
+    lines.append("Dial any result: !dial <ext>")
+    return "\n".join(lines).rstrip()
+
+def _pbx_dial(code: str):
+    e = _pbx_find(code)
+    if not e:
+        return f"Extension {code} not found."
+    desc = (e.get("description") or "").strip()
+    # Add helpful bridges into the existing builder bot.
+    bridge = ""
+    if str(e.get("code")) == "604":
+        bridge = ("\n\n🔧 Ryoko World Forge (web):\n"
+                  "- Create a world: !world create --name \"My World\" --biome forest --magic high --factions 3\n"
+                  "- Add rooms: !home add \"Marble Foyer\" --style gothic --size large\n"
+                  "- Link doors: !home door add --from \"Marble Foyer\" --to \"Library\"\n"
+                  "- View map: !map")
+    if str(e.get("code")) == "605":
+        bridge = ("\n\n🏰 Homeforge (web):\n"
+                  "- Keep adding rooms with !home add ...\n"
+                  "- Use !map to see your growing layout\n"
+                  "- Use !status to see counts\n"
+                  "- Use !reset if you want a clean slate")
+    return f"Ext {e['code']} — {e['name']}\n\n{desc}{bridge}".rstrip()
 def maybe_run_bot(room: str, user: str, msg: str):
     msg = (msg or "").strip()
     if not msg.startswith("!"):
@@ -314,8 +574,20 @@ def maybe_run_bot(room: str, user: str, msg: str):
 
     cmd = args.pop(0).lower()
     if cmd == "!help":
-        _bot_emit(room, HELP_TEXT)
+        _bot_emit\(room, HELP_TEXT\)
         return
+    if cmd == "!pbx":
+        _bot_emit(room, _pbx_menu())
+        return
+    if cmd == "!dial":
+        code = (args.pop(0) if args else "").strip()
+        _bot_emit(room, _pbx_dial(code))
+        return
+    if cmd == "!search":
+        text = " ".join(args).strip()
+        _bot_emit(room, _pbx_search(text))
+        return
+
     if cmd == "!world":
         sub = (args.pop(0).lower() if args else "")
         if sub == "create":
@@ -383,7 +655,7 @@ def index():
                 }
             )
     node_list.sort(key=lambda x: (x["node"], x["service"]))
-    return render_template("ghost_nodes.html", nodes=node_list, main_room=MAIN_ROOM)
+    return render_template("ghost_nodes.html", nodes=node_list, main_room=MAIN_ROOM, pbx_entries=_pbx_visible_entries())
 
 
 @app.route("/register-node", methods=["POST"])
