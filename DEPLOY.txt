@@ -4,3 +4,6 @@ Ghost Sentinel Hub v4.1
 
 Render start command:
 gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+
+
+v4.2.1 hotfix: fix bot help SyntaxError (_bot_emit line)
