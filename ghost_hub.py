@@ -574,7 +574,7 @@ def maybe_run_bot(room: str, user: str, msg: str):
 
     cmd = args.pop(0).lower()
     if cmd == "!help":
-        _bot_emit(room, HELP_TEXT)
+        _bot_emit\(room, HELP_TEXT\)
         return
     if cmd == "!pbx":
         _bot_emit(room, _pbx_menu())
