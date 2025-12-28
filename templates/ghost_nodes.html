@@ -363,6 +363,11 @@
     const dmLogEl = document.getElementById("dmLog");
     const meSidEl = document.getElementById("meSid");
     const pingLabel = document.getElementById("pingLabel");
+    const advTitle = document.getElementById("advTitle");
+    const advText = document.getElementById("advText");
+    const advChoices = document.getElementById("advChoices");
+    const advShowBtn = document.getElementById("advShowBtn");
+    const advResetBtn = document.getElementById("advResetBtn");
 
     let lastUserName = localStorage.getItem("ghosthub_username") || "";
     let autoJoinWanted = false;
@@ -864,3 +869,22 @@ async function encryptSealed(aesKey, ivU8, plaintext) {
   </script>
 </body>
 </html>
+
+function renderAdventure(payload) {
+  if (!payload || !advTitle || !advText || !advChoices) return;
+  advTitle.textContent = payload.title || "Adventure";
+  advText.textContent = payload.text || "";
+  advChoices.innerHTML = "";
+  const opts = payload.options || [];
+  opts.forEach((o) => {
+    const b = document.createElement("button");
+    b.className = "btn";
+    b.textContent = `${o.id} — ${o.label}`;
+    b.addEventListener("click", () => {
+      msgInput.value = `!choose ${o.id}`;
+      sendMessage();
+    });
+    advChoices.appendChild(b);
+  });
+}    socket.on("adventure_payload", (payload) => { renderAdventure(payload); });
+

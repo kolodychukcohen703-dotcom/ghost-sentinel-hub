@@ -429,6 +429,324 @@ def story_tick(room: str, tag: str, detail: str = "") -> str:
         s["chapter"] += 1
         chap = s["chapter"]
 
+# --- Choose-Your-Own-Adventure engine (room-scoped) ---
+# Lightweight branching story with lots of possible outcomes.
+ADVENTURE_STATE = {}  # room -> dict(active:bool, node:str, flags:set, history:list[str], rng:int)
+
+ADVENTURE_NODES = {
+    "start": {
+        "title": "The Lobby That Remembers",
+        "text": (
+            "You re-enter the Ghost Hub Lobby. The map flickers—world-lines and room-lines "
+            "interweaving like a circuit drawn in starlight. A prompt appears:\n\n"
+            "**Choose what you do next.**"
+        ),
+        "options": [
+            {"id": "1", "label": "Inspect the World Atlas (Ryoko)", "next": "atlas", "set": ["saw_atlas"]},
+            {"id": "2", "label": "Step toward Homeforge Mansion", "next": "homeforge_gate", "set": ["toward_homeforge"]},
+            {"id": "3", "label": "Dial the PBX and listen for a hidden line", "next": "pbx_whisper", "set": ["touched_pbx"]},
+            {"id": "4", "label": "Hold still and sense the network pulse", "next": "pulse", "set": ["listened"]},
+        ],
+    },
+
+    "atlas": {
+        "title": "World Atlas",
+        "text": (
+            "The atlas opens. Biomes drift past: **forest**, **coast**, **ruins**, **floating-islands**. "
+            "A thin cursor waits for your intent."
+        ),
+        "options": [
+            {"id": "1", "label": "Name a biome: forest", "next": "biome_forest", "set": ["biome:forest"]},
+            {"id": "2", "label": "Name a biome: coast", "next": "biome_coast", "set": ["biome:coast"]},
+            {"id": "3", "label": "Name a biome: ruins", "next": "biome_ruins", "set": ["biome:ruins"]},
+            {"id": "4", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "biome_forest": {
+        "title": "The Forest Thread",
+        "text": (
+            "The forest takes root in the map. Pines and cedar rise in silence. "
+            "Somewhere, a stream learns its own name."
+        ),
+        "options": [
+            {"id": "1", "label": "Add weather: fog", "next": "weather_fog", "set": ["weather:fog"]},
+            {"id": "2", "label": "Summon an NPC guide", "next": "npc_guide", "set": ["npc:guide"]},
+            {"id": "3", "label": "Begin a quest: The Door That Remembers", "next": "quest_door", "set": ["quest:door"]},
+            {"id": "4", "label": "Back to Atlas", "next": "atlas", "set": []},
+        ],
+    },
+
+    "biome_coast": {
+        "title": "The Coast Thread",
+        "text": (
+            "Salt air enters the system. Waves leave an audit trail of foam. "
+            "A lighthouse flickers in a place that wasn’t there before."
+        ),
+        "options": [
+            {"id": "1", "label": "Add weather: storm", "next": "weather_storm", "set": ["weather:storm"]},
+            {"id": "2", "label": "Mark a landmark: lighthouse", "next": "landmark_lighthouse", "set": ["landmark:lighthouse"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "biome_ruins": {
+        "title": "The Ruins Thread",
+        "text": (
+            "Stone remembers. A broken arch speaks in gaps. Symbols glow faintly as if waiting for a key."
+        ),
+        "options": [
+            {"id": "1", "label": "Search the ruins for a rune-key", "next": "rune_key", "set": ["item:rune_key"]},
+            {"id": "2", "label": "Add NPC: Archivist Moth", "next": "npc_moth", "set": ["npc:moth"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "weather_fog": {
+        "title": "Fog Protocol",
+        "text": "Fog drifts through the canopy. It doesn’t hide the path—only makes you choose it.",
+        "options": [
+            {"id": "1", "label": "Proceed deeper (risk)", "next": "fog_deeper", "set": ["risk:fog"]},
+            {"id": "2", "label": "Return to safety", "next": "biome_forest", "set": []},
+        ],
+    },
+
+    "fog_deeper": {
+        "title": "A Door in the Fog",
+        "text": (
+            "You find a door standing alone, hinge-sigil etched into the frame. "
+            "It’s not locked—but it is **sealed**."
+        ),
+        "options": [
+            {"id": "1", "label": "Seal it with a rune cipher (secure)", "next": "seal_door", "set": ["sealed:door"]},
+            {"id": "2", "label": "Open it anyway (unknown)", "next": "open_door", "set": ["opened:door"]},
+            {"id": "3", "label": "Retreat", "next": "weather_fog", "set": []},
+        ],
+    },
+
+    "seal_door": {
+        "title": "Sealed",
+        "text": (
+            "The rune cipher blooms across the frame—your pattern, your consent. "
+            "The door becomes a promise: **only those you invite may pass**."
+        ),
+        "options": [
+            {"id": "1", "label": "Anchor the seal to Homeforge Vault", "next": "homeforge_vault_link", "set": ["link:vault"]},
+            {"id": "2", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "open_door": {
+        "title": "Opened",
+        "text": (
+            "The door opens into a narrow hall of mirrors. Each mirror shows a version of the world that might be.\n"
+            "_A choice arrives as a whisper:_"
+        ),
+        "options": [
+            {"id": "1", "label": "Choose the brighter world", "next": "mirror_bright", "set": ["mirror:bright"]},
+            {"id": "2", "label": "Choose the stronger world", "next": "mirror_strong", "set": ["mirror:strong"]},
+            {"id": "3", "label": "Choose the quieter world", "next": "mirror_quiet", "set": ["mirror:quiet"]},
+        ],
+    },
+
+    "mirror_bright": {"title": "Bright Thread", "text": "Light pours into the atlas. Colors sharpen. Hope becomes an actual parameter.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":["tone:bright"]}]},
+    "mirror_strong": {"title": "Strong Thread", "text": "The world gains walls and watchfires. It becomes resilient, not rigid.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":["tone:strong"]}]},
+    "mirror_quiet": {"title": "Quiet Thread", "text": "Noise fades. The world becomes a sanctuary for careful thoughts.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":["tone:quiet"]}]},
+
+    "npc_guide": {
+        "title": "A Guide Arrives",
+        "text": (
+            "A guide steps from the trees. They don’t demand belief—only clarity.\n"
+            "\"Name what you want to build,\" they say."
+        ),
+        "options": [
+            {"id": "1", "label": "A safe home", "next": "homeforge_gate", "set": ["desire:home"]},
+            {"id": "2", "label": "A wide world", "next": "atlas", "set": ["desire:world"]},
+            {"id": "3", "label": "A protected link", "next": "pbx_whisper", "set": ["desire:secure_link"]},
+        ],
+    },
+
+    "quest_door": {
+        "title": "Quest Started",
+        "text": (
+            "**Quest: The Door That Remembers**\n"
+            "- Find the hinge-sigil\n"
+            "- Speak the vow at the crack\n"
+            "- Decide: seal or open\n\n"
+            "The quest binds itself to your atlas."
+        ),
+        "options": [
+            {"id": "1", "label": "Search for hinge-sigil now", "next": "fog_deeper", "set": ["queststep:hinge"]},
+            {"id": "2", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "homeforge_gate": {
+        "title": "Homeforge Gate",
+        "text": (
+            "A gate appears, outlined in warm light. Beyond it: halls, rooms, doors, gardens, defenses.\n\n"
+            "**Choose your first construction.**"
+        ),
+        "options": [
+            {"id": "1", "label": "Build an Atrium (heart of the house)", "next": "build_atrium", "set": ["room:atrium"]},
+            {"id": "2", "label": "Build an Observatory (sky + maps)", "next": "build_observatory", "set": ["room:observatory"]},
+            {"id": "3", "label": "Build a Vault (secure storage)", "next": "build_vault", "set": ["room:vault"]},
+            {"id": "4", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "build_atrium": {
+        "title": "Atrium Built",
+        "text": "The Atrium forms—sunlit marble, vines, a fountain that sounds like calm. The house feels alive.",
+        "options": [
+            {"id": "1", "label": "Add a hall to Observatory", "next": "build_observatory", "set": ["link:atrium->observatory"]},
+            {"id": "2", "label": "Add a door to Vault (rune-sealed)", "next": "build_vault", "set": ["link:atrium->vault"]},
+            {"id": "3", "label": "Landscape: courtyard garden", "next": "landscape_garden", "set": ["landscape:garden"]},
+            {"id": "4", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "build_observatory": {
+        "title": "Observatory Built",
+        "text": "Brass and velvet. Star-charts breathe. The ceiling is a map that updates when you speak.",
+        "options": [
+            {"id": "1", "label": "Decorate: celestial gothic", "next": "decor_celestial", "set": ["decor:celestial"]},
+            {"id": "2", "label": "Add a secret passage", "next": "secret_passage", "set": ["secret:passage"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "build_vault": {
+        "title": "Vault Built",
+        "text": "Iron plates, quiet runes, and a lock that waits for your cipher. This place is made for what must endure.",
+        "options": [
+            {"id": "1", "label": "Set a rune cipher lock", "next": "vault_cipher", "set": ["vault:locked"]},
+            {"id": "2", "label": "Link vault to a sealed door", "next": "homeforge_vault_link", "set": ["link:vault"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "vault_cipher": {
+        "title": "Cipher Set",
+        "text": "You set a cipher pattern—glyphs interlocking like a living circuit. The vault accepts it.",
+        "options": [
+            {"id": "1", "label": "Return to Lobby", "next": "start", "set": []},
+            {"id": "2", "label": "Show Map Snapshot", "next": "map_snapshot", "set": []},
+        ],
+    },
+
+    "homeforge_vault_link": {
+        "title": "Linked",
+        "text": "A subtle link forms between the sealed door and the vault. Not a shortcut—an agreement.",
+        "options": [
+            {"id": "1", "label": "Show Map Snapshot", "next": "map_snapshot", "set": []},
+            {"id": "2", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "landscape_garden": {
+        "title": "Courtyard Garden",
+        "text": "Stone paths, watchfires, and an orchard that glows softly at dusk. The house gains a horizon of its own.",
+        "options": [
+            {"id": "1", "label": "Upgrade tier: Silver", "next": "tier_silver", "set": ["tier:silver"]},
+            {"id": "2", "label": "Upgrade tier: Gold", "next": "tier_gold", "set": ["tier:gold"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "tier_silver": {"title": "Silver Tier", "text": "Silver filigree lines the doors. Sensors become sigils; sigils become guardians.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":[]}]},
+    "tier_gold": {"title": "Gold Tier", "text": "Gold light settles into the frames. The home feels ceremonial—like it belongs to a lineage.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":[]}]},
+
+    "decor_celestial": {"title": "Celestial Decor", "text": "Constellations appear on the walls when you breathe. The room becomes a living compass.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":[]}]},
+    "secret_passage": {"title": "Secret Passage", "text": "A hidden seam opens. The passage will appear only when you speak the right phrase.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":[]}]},
+
+    "pbx_whisper": {
+        "title": "PBX Whisper",
+        "text": "The PBX emits a tone that sounds like wind through an antenna. A hidden line offers you choices.",
+        "options": [
+            {"id": "1", "label": "Dial 101 (safe line)", "next": "pbx_101", "set": ["pbx:101"]},
+            {"id": "2", "label": "Dial 303 (encrypted line)", "next": "pbx_303", "set": ["pbx:303"]},
+            {"id": "3", "label": "Return to Lobby", "next": "start", "set": []},
+        ],
+    },
+
+    "pbx_101": {"title": "Line 101", "text": "A calm voice answers: “You’re connected. Keep it simple. Keep it kind.”", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":[]}]},
+    "pbx_303": {"title": "Line 303", "text": "Digits cascade like runes. A secure channel forms—private, deliberate, and quiet.", "options": [{"id":"1","label":"Return to Lobby","next":"start","set":["secure:channel"]}]},
+
+    "pulse": {"title":"Network Pulse","text":"You feel the pulse: a rhythm in copper and light. It’s not just uptime. It’s presence.","options":[{"id":"1","label":"Begin Adventure (start)","next":"start","set":["adventure"]},{"id":"2","label":"Show Map Snapshot","next":"map_snapshot","set":[]}]} ,
+    "map_snapshot": {"title":"Snapshot","text":"You unfold the atlas and estate together. The system shows what has been committed so far.","options":[{"id":"1","label":"Return to Lobby","next":"start","set":[]}]} ,
+}
+
+def _adv(room: str) -> dict:
+    s = ADVENTURE_STATE.get(room)
+    if not s:
+        s = {"active": False, "node": "start", "flags": set(), "history": [], "rng": random.randint(1000, 9999)}
+        ADVENTURE_STATE[room] = s
+    return s
+
+def adv_reset(room: str):
+    ADVENTURE_STATE[room] = {"active": True, "node": "start", "flags": set(), "history": [], "rng": random.randint(1000, 9999)}
+
+def adv_render(room: str) -> dict:
+    s = _adv(room)
+    node_id = s.get("node", "start")
+    node = ADVENTURE_NODES.get(node_id, ADVENTURE_NODES["start"])
+    title = node.get("title", node_id)
+    text = node.get("text", "")
+    opts = node.get("options", [])
+
+    tail = []
+    flags = s.get("flags", set())
+    if any(f.startswith("biome:") for f in flags):
+        biome = [f.split(":",1)[1] for f in flags if f.startswith("biome:")][-1]
+        tail.append(f"**Biome:** {biome}")
+    if any(f.startswith("tier:") for f in flags):
+        tier = [f.split(":",1)[1] for f in flags if f.startswith("tier:")][-1]
+        tail.append(f"**Estate Tier:** {tier}")
+    if "vault:locked" in flags:
+        tail.append("**Vault:** locked (cipher set)")
+    if "secure:channel" in flags:
+        tail.append("**Channel:** encrypted line active")
+    meta = ("\n\n" + " • ".join(tail)) if tail else ""
+
+    return {"title": title, "text": text + meta, "options": [{"id":o["id"], "label":o["label"]} for o in opts], "node": node_id}
+
+def adv_choose(room: str, choice_id: str) -> dict:
+    s = _adv(room)
+    node_id = s.get("node", "start")
+    node = ADVENTURE_NODES.get(node_id, ADVENTURE_NODES["start"])
+    opts = node.get("options", [])
+    pick = None
+    for o in opts:
+        if str(o.get("id")) == str(choice_id):
+            pick = o
+            break
+    if not pick:
+        return {"error": f"Unknown choice '{choice_id}'. Try `!choices` or `!adv`."}
+
+    for fl in pick.get("set", []) or []:
+        s["flags"].add(fl)
+    s["history"].append(f"{node_id}:{choice_id}")
+    s["node"] = pick.get("next", "start")
+    return adv_render(room)
+
+def adv_to_text(payload: dict) -> str:
+    if payload.get("error"):
+        return f"⚠️ {payload['error']}"
+    title = payload.get("title","")
+    text = payload.get("text","")
+    opts = payload.get("options", [])
+    lines = [f"📖 **{title}**", text, ""]
+    if opts:
+        lines.append("**Choose:**")
+        for o in opts:
+            lines.append(f"- `{o['id']}` — {o['label']}")
+        lines.append("\nUse `!choose <id>` (example: `!choose 1`).")
+    else:
+        lines.append("_No choices available._ Use `!adv reset`.")
+    return "\n".join(lines)
+
+
     tones = [
         "The air hums, as if the wires themselves remember your intent.",
         "Somewhere behind the interface, a door unlatches with a soft click.",
