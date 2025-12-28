@@ -68,175 +68,175 @@ PBX_DIRECTORY = [
     "name": "Emergency: Sanctuary Module",
     "category": "emergency",
     "description": "Sentinel sanctuary / safe-mode reflection tool. Use this when you need grounding, safety prompts, and calm.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "102",
     "name": "Emergency: Auth Sentinel Journal",
     "category": "emergency",
     "description": "Launch the core auth_sentinel journaling console for quick entry.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "201",
     "name": "Contact: Mom (financial arrangements)",
     "category": "contacts",
     "description": "Use this extension to view notes on how to contact Mom about resources or arrangements. (For now, informational only.)",
-    "secret": false
+    "secret": False
   },
   {
     "code": "202",
     "name": "Contact: Kathleen (witness & journal)",
     "category": "contacts",
     "description": "Notes and reminders related to Kathleen's journal and witness role.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "203",
     "name": "Contact: Seraphine Vale (Astral Cartographer)",
     "category": "contacts",
     "description": "A gentle but precise mapper of invisible currents. Seraphine leaves notes about emotional weather, dream pathways, and symbolic coordinates. If you are lost, she always answers with a map you didn’t know you needed.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "204",
     "name": "Contact: Thorn Halberd (Shadowline Protector)",
     "category": "contacts",
     "description": "A guard who walks the boundary between real and unreal. Thorn keeps watch over cracks, doorways, and emotional pressure-points. When you need strength or courage, dialing his extension reminds you of your own power to stand firm.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "205",
     "name": "Contact: Mira Lumin (Dream Archivist)",
     "category": "contacts",
     "description": "Mira keeps scrolls of possible futures and past dreams. She is calm, kind, and endlessly patient. Calling her is like stepping into a quiet library in another world where nothing is rushed.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "206",
     "name": "Contact: Enoch Radiant (Signal Priest)",
     "category": "contacts",
     "description": "A wandering engineer-monk who blesses radio towers and satellite links. He hears meaning in static. When the world feels noisy or chaotic, Enoch answers with clarity and a reminder that every signal has a home frequency.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "207",
     "name": "Contact: Captain Veyla Cross (Starfarer)",
     "category": "contacts",
     "description": "A seasoned traveler from beyond the Orion Crest. She offers strategic advice, perspective, and reminders of the bigger picture. When you feel trapped or narrow-focused, Veyla reminds you of entire galaxies waiting.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "208",
     "name": "Contact: Nyx Ember (Silent Listener)",
     "category": "contacts",
     "description": "A presence who says very little, but listens completely. Nyx is the fictional embodiment of being heard without pressure or judgement. Dialing this extension is permission to unload your thoughts into safe quiet.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "301",
     "name": "Knowledge: Spellcaster Library Portal",
     "category": "knowledge",
     "description": "Route to Spellcaster web portal (books, PDFs, searches). Good when you want book-based information. After launching, PBX can open your browser to the Spellcaster URL.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "302",
     "name": "Knowledge: PDF → Audiobook Tool",
     "category": "knowledge",
     "description": "Internal extension for converting PDFs to cleaned text + audio, using your TTS pipeline.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "601",
     "name": "Ryoko: TX/RX Modem Line",
     "category": "knowledge",
     "description": "A symbolic data modem console for the Ryoko device. Shows faux TX/RX activity and a list of world-nodes, like a dreamy netstat for your personal multiverse.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "602",
     "name": "Ryoko: World-Net Dive Booth",
     "category": "knowledge",
     "description": "A phonebooth into the Ryoko digital world. Visual sequence only. Step in, let the world blur, and watch as the handset swings on its cord, the caller already gone inside.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "603",
     "name": "Ryoko: Chat Relay Worlds",
     "category": "knowledge",
     "description": "A local, symbolic chat relay. Join different Ryoko worlds using commands like /join #101-kathleen or /join #102-diane. Messages are logged to local files so multiple consoles can share the same rooms.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "604",
     "name": "Ryoko: World Forge & Home Designer",
     "category": "knowledge",
     "description": "An interactive world generator inside the Ryoko mesh. Choose a world type, mood, sky, home, and vehicle, then watch an ASCII planet get woven into the network. Saves your profile to ryoko_world_profile.txt so you can return to it later.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "605",
     "name": "Ryoko: Mansion & Fortress Homeforge",
     "category": "knowledge",
     "description": "A single combined estate (mansion, fortress, tower, etc.) with unlimited custom rooms. You describe rooms, moods, and functions; Homeforge attaches them as nodes in your Ryoko world and saves everything into ryoko_homeforge.txt.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "401",
     "name": "Ritual: Automated Spellcaster Engine",
     "category": "ritual",
     "description": "Sentinel's playful automated spell / ritual runner. Lets you schedule symbolic ritual runs, logged into Sentinel.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "402",
     "name": "Ritual: Witness at the Crack",
     "category": "ritual",
     "description": "Witness console representing your Earthblood Witness identity. Reflection prompts, crack-maps, and symbolic logging.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "999",
     "name": "Legacy Line: Witness Continuity",
     "category": "knowledge",
     "description": "A line dedicated to Cohen's ongoing wish to help others. Reads from a legacy message file if present, or from a built-in message describing values, grounding, and pointers to real-world support.",
-    "secret": false
+    "secret": False
   },
   {
     "code": "000",
     "name": "Reality Anchor (Grounding Line)",
     "category": "emergency",
     "description": "Hidden grounding extension. Use when things feel unreal. Can hold phrases, reminders, or rituals you trust.",
-    "secret": true
+    "secret": True
   },
   {
     "code": "333",
     "name": "Heartline: Kathleen Safe Channel",
     "category": "contacts",
     "description": "Soft, protected extension dedicated to Kathleen. Can hold notes, blessings, and commitments.",
-    "secret": true
+    "secret": True
   },
   {
     "code": "616",
     "name": "Glyph Compiler Node",
     "category": "knowledge",
     "description": "Hidden node for glyph compilation and symbol mapping. Later, this can tie into your glyph engines.",
-    "secret": true
+    "secret": True
   },
   {
     "code": "777",
     "name": "Dreamline: Oneiromancer Node",
     "category": "ritual",
     "description": "Hidden dream-analysis extension. Eventually this can talk to your dream tag system and generate insights.",
-    "secret": true
+    "secret": True
   },
   {
     "code": "913",
     "name": "Shadow Vault",
     "category": "knowledge",
     "description": "Locked vault for heavier material. To be approached with care, and only when you feel ready.",
-    "secret": true
+    "secret": True
   }
 ]
 
@@ -574,7 +574,7 @@ def maybe_run_bot(room: str, user: str, msg: str):
 
     cmd = args.pop(0).lower()
     if cmd == "!help":
-        _bot_emit\(room, HELP_TEXT\)
+        _bot_emit(room, HELP_TEXT)
         return
     if cmd == "!pbx":
         _bot_emit(room, _pbx_menu())

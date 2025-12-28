@@ -4,3 +4,10 @@ Ghost Sentinel Hub v4.1
 
 Render start command:
 gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+
+
+v4.2.1 hotfix: fix bot help SyntaxError (_bot_emit line)
+
+Hotfix v4.2.2: Python boolean tokens fixed (false/true/null).
+
+Hotfix v4.2.3: removed stray escape characters in bot emit calls.
