@@ -11,3 +11,5 @@ v4.2.1 hotfix: fix bot help SyntaxError (_bot_emit line)
 Hotfix v4.2.2: Python boolean tokens fixed (false/true/null).
 
 Hotfix v4.2.3: removed stray escape characters in bot emit calls.
+
+Update v4.3: expanded world/home designer help+examples, `!help world`, `!help home`, and a narrative beat after key commands.

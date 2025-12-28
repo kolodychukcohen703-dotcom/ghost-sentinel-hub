@@ -318,30 +318,159 @@ def set_room_state(room: str, st: dict):
         save_state_all(all_state)
 
 
-HELP_TEXT = """Commands:
-  !help
-  !world create --biome <name> --magic <low|med|high> --factions <N> [--name "<World Name>"]
-  !home add "<Room Name>" [--style <style>] [--size <size>]
-  !home door add --from "<Room A>" --to "<Room B>"
-  !map
-  !status
-  !reset
-  !users
+HELP_TEXT = """📟 **Ghost Hub Bot Help**
+Use commands in chat starting with `!`
 
-Examples:
-  !world create --name "Sanctuary-Lobby" --biome forest --magic high --factions 3
-  !home add "Marble Foyer" --style gothic --size large
-  !home door add --from "Marble Foyer" --to "Library"
-  !map
+**Core**
+- `!help` — this help
+- `!help world` — world designer commands + examples
+- `!help home` — home/fortress designer commands + examples
+- `!status` — server status + active counts
+- `!users` — list users in lobby
+- `!map` — show current world + home snapshot
 
-  !pbx                 (show PBX menu)
-  !dial <ext>          (describe an extension, e.g. !dial 605)
-  !search <text>       (search directory by name/code; secret lines only show if you dial exact code)
+**World (quick)**
+- `!world create <name>` — create a world seed
+- `!world biome <biome>` — set biome (forest, tundra, desert, coast, city, ruins…)
+- `!world weather <pattern>` — calm, storm, fog, aurora, heatwave…
+- `!world npc add "<name>" role="<role>"` — add an NPC
+- `!world quest start "<title>"` — start a quest
+- `!world time <dawn|day|dusk|night>` — set time-of-day
 
-UI shortcuts:
-  Use the PBX dropdown to send !dial commands quickly.
+**Home (quick)**
+- `!home create <name>` — create an estate
+- `!home room add "<room>" theme="<theme>"` — add a room
+- `!home hall add "<from>" "<to>"` — connect areas
+- `!home door add "<from>" "<to>" type="<type>"` — door (oak, iron, rune, hidden…)
+- `!home decorate "<room>" style="<style>"` — decorate a room
+- `!home landscape add "<feature>"` — gardens, walls, fountains, orchards…
+- `!home upgrade <bronze|silver|gold|celestial>` — upgrade tier"""
 
-"""
+HELP_WORLD = """🌍 **World Designer — Help + Examples**
+
+**Create**
+- `!world create Ryoko-Delta`
+- `!world seed 1984-CRACK` (optional: locks your vibe)
+
+**Biomes**
+- `!world biome forest`
+- `!world biome coast`
+- `!world biome ruins`
+- `!world biome floating-islands`
+
+**Weather + mood**
+- `!world weather fog`
+- `!world weather storm`
+- `!world weather aurora`
+
+**NPCs**
+- `!world npc add "Kathleen" role="Caretaker of Keys"`
+- `!world npc add "Archivist Moth" role="Library Spirit"`
+
+**Quests**
+- `!world quest start "The Door That Remembers"`
+- `!world quest addstep "Find the hinge-sigil"`
+- `!world quest addstep "Speak the vow at the crack"`
+
+**Time**
+- `!world time dusk`
+
+**Snapshot**
+- `!map`"""
+
+HELP_HOME = """🏰 **Home / Fortress Designer — Help + Examples**
+
+**Create estate**
+- `!home create Homeforge-Mansion`
+
+**Add rooms**
+- `!home room add "Atrium" theme="sunlit marble + vines"`
+- `!home room add "Observatory" theme="brass, star-charts, velvet"`
+- `!home room add "Vault" theme="iron + rune locks"`
+
+**Connect spaces**
+- `!home hall add "Atrium" "Observatory"`
+- `!home door add "Atrium" "Vault" type="rune-sealed"`
+
+**Decor**
+- `!home decorate "Observatory" style="celestial gothic"`
+- `!home decorate "Atrium" style="garden temple"`
+
+**Landscape**
+- `!home landscape add "courtyard fountain"`
+- `!home landscape add "orchard of silver apples"`
+- `!home landscape add "outer wall with watchfires"`
+
+**Upgrades**
+- `!home upgrade bronze`
+- `!home upgrade silver`
+- `!home upgrade gold`
+- `!home upgrade celestial`
+
+**Snapshot**
+- `!map`"""
+
+# --- Storyline engine (lightweight, room-scoped) ---
+STORY_STATE = {}  # room -> dict(chapter:int, beat:int)
+
+def _story(room: str) -> dict:
+    s = STORY_STATE.get(room)
+    if not s:
+        s = {"chapter": 1, "beat": 0}
+        STORY_STATE[room] = s
+    return s
+
+def story_tick(room: str, tag: str, detail: str = "") -> str:
+    s = _story(room)
+    s["beat"] += 1
+    beat = s["beat"]
+    chap = s["chapter"]
+    if beat in (8, 16, 24, 32):
+        s["chapter"] += 1
+        chap = s["chapter"]
+
+    tones = [
+        "The air hums, as if the wires themselves remember your intent.",
+        "Somewhere behind the interface, a door unlatches with a soft click.",
+        "A thin veil of starlight drifts across the lobby, then settles into the map.",
+        "You feel the system listening—not to judge, but to witness.",
+        "A quiet pulse moves through the network like a heartbeat in copper.",
+    ]
+    catalysts = {
+        "world": [
+            "The world’s horizon widens a fraction, revealing new edges of possibility.",
+            "The sky adjusts to the new parameters, like a stage light finding its mark.",
+            "A distant landmark becomes real: not yet named, but already present.",
+        ],
+        "home": [
+            "The estate accepts the new architecture as if it has always existed.",
+            "A corridor draws itself in the dust, then hardens into stone and wood.",
+            "Locks and hinges align—security and sanctuary agreeing on their terms.",
+        ],
+        "pbx": [
+            "A dial tone becomes a ritual: numbers as runes, runes as access.",
+            "An extension rings once in the unseen halls, then answers in silence.",
+        ],
+        "misc": [
+            "The log records your step like a footprint on fresh snow.",
+            "The console flickers—then steadies, like it trusts you.",
+        ],
+    }
+
+    import random
+    key = "misc"
+    if tag.startswith("world"):
+        key = "world"
+    elif tag.startswith("home"):
+        key = "home"
+    elif tag.startswith("dial") or tag.startswith("pbx"):
+        key = "pbx"
+
+    line1 = random.choice(tones)
+    line2 = random.choice(catalysts.get(key, catalysts["misc"]))
+    line3 = f"**Story Beat {chap}.{beat}:** {detail or 'The system marks your command as a turning point.'}"
+    return "🕯️ _Narrative_\n" + line1 + "\n" + line2 + "\n" + line3
+
 
 
 def _bot_emit(room: str, msg: str):
