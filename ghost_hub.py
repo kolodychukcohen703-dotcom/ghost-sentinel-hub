@@ -329,6 +329,13 @@ Use commands in chat starting with `!`
 - `!users` — list users in lobby
 - `!map` — show current world + home snapshot
 
+**Adventure (Choose-Your-Own)**
+- `!adv` — show the current story page + choices (also shows in the 📖 Adventure panel)
+- `!adv reset` — restart the story
+- `!choices` — re-print the current choices
+- `!choose <id>` — pick a choice (example: `!choose 1`)
+- `!inv` — show your inventory (items found during the adventure)
+
 **World (quick)**
 - `!world create <name>` — create a world seed
 - `!world biome <biome>` — set biome (forest, tundra, desert, coast, city, ruins…)
@@ -709,7 +716,17 @@ def adv_render(room: str) -> dict:
         tail.append("**Channel:** encrypted line active")
     meta = ("\n\n" + " • ".join(tail)) if tail else ""
 
-    return {"title": title, "text": text + meta, "options": [{"id":o["id"], "label":o["label"]} for o in opts], "node": node_id}
+    visible = []
+    locked = []
+    for o in opts:
+        req = o.get("requires") or []
+        if all((r in flags) for r in req):
+            visible.append({"id": o.get("id"), "label": o.get("label")})
+        else:
+            need = ", ".join(req) if req else ""
+            locked.append({"id": o.get("id"), "label": o.get("label"), "need": need})
+
+    return {"title": title, "text": text + meta, "options": visible, "locked": locked, "node": node_id}
 
 def adv_choose(room: str, choice_id: str) -> dict:
     s = _adv(room)
@@ -728,7 +745,12 @@ def adv_choose(room: str, choice_id: str) -> dict:
         s["flags"].add(fl)
     s["history"].append(f"{node_id}:{choice_id}")
     s["node"] = pick.get("next", "start")
-    return adv_render(room)
+    payload = adv_render(room)
+    try:
+        _emit_world_state(room)
+    except Exception:
+        pass
+    return payload
 
 def adv_to_text(payload: dict) -> str:
     if payload.get("error"):
@@ -736,11 +758,18 @@ def adv_to_text(payload: dict) -> str:
     title = payload.get("title","")
     text = payload.get("text","")
     opts = payload.get("options", [])
+    locked = payload.get("locked", [])
     lines = [f"📖 **{title}**", text, ""]
     if opts:
         lines.append("**Choose:**")
         for o in opts:
             lines.append(f"- `{o['id']}` — {o['label']}")
+        if locked:
+            lines.append("")
+            lines.append("**Locked:**")
+            for o in locked:
+                need = o.get("need") or "requirements"
+                lines.append(f"- `({o.get('id')})` — 🔒 {o.get('label')} _(needs: {need})_")
         lines.append("\nUse `!choose <id>` (example: `!choose 1`).")
     else:
         lines.append("_No choices available._ Use `!adv reset`.")
@@ -774,6 +803,73 @@ def adv_to_text(payload: dict) -> str:
             "The console flickers—then steadies, like it trusts you.",
         ],
     }
+
+# --- Adventure helpers: locked choices + inventory + world state + encounters ---
+def _adv_flags_to_state(flags: set) -> dict:
+    def last(prefix: str):
+        vals = [f.split(":",1)[1] for f in flags if f.startswith(prefix)]
+        return vals[-1] if vals else None
+
+    biome = last("biome:")
+    weather = last("weather:")
+    tier = last("tier:")
+    tone = last("tone:")
+    items = sorted([f.split(":",1)[1] for f in flags if f.startswith("item:")])
+
+    rooms = sorted([f.split(":",1)[1] for f in flags if f.startswith("room:")])
+    links = sorted([f.split(":",1)[1] for f in flags if f.startswith("link:")])
+    decor = sorted([f.split(":",1)[1] for f in flags if f.startswith("decor:")])
+
+    return {
+        "biome": biome,
+        "weather": weather,
+        "tier": tier,
+        "tone": tone,
+        "items": items,
+        "rooms": rooms,
+        "links": links,
+        "decor": decor,
+        "vault_locked": ("vault:locked" in flags),
+        "secure_channel": ("secure:channel" in flags),
+        "sealed_door": ("sealed:door" in flags),
+    }
+
+def _encounter_for(flags: set) -> str:
+    import random
+    biome = None
+    for f in flags:
+        if f.startswith("biome:"):
+            biome = f.split(":",1)[1]
+    tables = {
+        None: [
+            "A soft dial tone echoes through the hall, as if the system is checking you back.",
+            "A flicker of starfall crosses the UI, then settles into the map grid.",
+            "You notice a new icon in the corner—unlabeled, but calm.",
+        ],
+        "forest": [
+            "In the forest thread, you hear water negotiating with stone. A path becomes slightly easier to follow.",
+            "A cedar branch bends toward you. Something like a blessing—quiet, not loud—touches your shoulder.",
+            "A moth-librarian circles once and leaves behind a tiny paper tag: **‘keep going’**.",
+        ],
+        "coast": [
+            "Salt wind sweeps the interface. A lighthouse blinks twice—like a heartbeat in fog.",
+            "A wave rolls in and retreats; where it was, a shell remains—small proof of progress.",
+            "Seabirds cry above the map; the coastline redraws cleaner, more stable.",
+        ],
+        "ruins": [
+            "A broken arch realigns for a second, showing you how it *used* to stand.",
+            "Dust rises, spelling a single rune before collapsing back into silence.",
+            "A cold lantern ignites in the ruins, then waits—patient, neutral, present.",
+        ],
+    }
+    choices = tables.get(biome, tables[None])
+    return "✨ **Encounter:** " + random.choice(choices)
+
+def _emit_world_state(room: str):
+    s = _adv(room)
+    payload = _adv_flags_to_state(s.get("flags", set()))
+    emit("world_state", payload, room=room)
+
 
     import random
     key = "misc"

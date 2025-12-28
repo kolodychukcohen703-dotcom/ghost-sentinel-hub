@@ -368,6 +368,8 @@
     const advChoices = document.getElementById("advChoices");
     const advShowBtn = document.getElementById("advShowBtn");
     const advResetBtn = document.getElementById("advResetBtn");
+    const worldMap = document.getElementById("worldMap");
+    const worldMeta = document.getElementById("worldMeta");
 
     let lastUserName = localStorage.getItem("ghosthub_username") || "";
     let autoJoinWanted = false;
@@ -880,6 +882,55 @@ function renderAdventure(payload) {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = `${o.id} — ${o.label}`;
+
+function drawWorldMap(state) {
+  if (!worldMap) return;
+  const ctx = worldMap.getContext("2d");
+  const w = worldMap.width, h = worldMap.height;
+  ctx.clearRect(0,0,w,h);
+
+  // Background grid
+  const step = 20;
+  ctx.globalAlpha = 0.35;
+  for (let x=0; x<=w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for (let y=0; y<=h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  ctx.globalAlpha = 1.0;
+
+  // Biome block
+  ctx.strokeRect(12, 12, 160, 60);
+  ctx.font = "12px system-ui";
+  ctx.fillText("Biome", 18, 28);
+  ctx.font = "16px system-ui";
+  ctx.fillText((state && state.biome) ? state.biome : "—", 18, 52);
+
+  // Home block
+  ctx.strokeRect(188, 12, 120, 60);
+  ctx.font = "12px system-ui";
+  ctx.fillText("Home", 196, 28);
+  ctx.font = "12px system-ui";
+  const rooms = (state && state.rooms) ? state.rooms.slice(0,4) : [];
+  ctx.fillText(rooms.length ? rooms.join(", ") : "—", 196, 48);
+
+  // Items row
+  ctx.strokeRect(12, 90, 296, 48);
+  ctx.font = "12px system-ui";
+  ctx.fillText("Items / Flags", 18, 106);
+  const items = (state && state.items) ? state.items.slice(0,6) : [];
+  const tier = state && state.tier ? ("tier:" + state.tier) : "";
+  const weather = state && state.weather ? ("weather:" + state.weather) : "";
+  const line = [tier, weather].filter(Boolean).concat(items).join("  •  ");
+  ctx.fillText(line || "—", 18, 128);
+
+  if (worldMeta) {
+    const parts = [];
+    if (state && state.tier) parts.push("Tier: " + state.tier);
+    if (state && state.weather) parts.push("Weather: " + state.weather);
+    if (state && state.tone) parts.push("Tone: " + state.tone);
+    if (state && state.secure_channel) parts.push("Secure: on");
+    if (state && state.vault_locked) parts.push("Vault: locked");
+    worldMeta.textContent = parts.length ? parts.join(" • ") : "—";
+  }
+}
     b.addEventListener("click", () => {
       msgInput.value = `!choose ${o.id}`;
       sendMessage();
@@ -887,4 +938,5 @@ function renderAdventure(payload) {
     advChoices.appendChild(b);
   });
 }    socket.on("adventure_payload", (payload) => { renderAdventure(payload); });
+    socket.on("world_state", (state) => { try { drawWorldMap(state); } catch(e){} });
 

@@ -15,3 +15,5 @@ Hotfix v4.2.3: removed stray escape characters in bot emit calls.
 Update v4.3: expanded world/home designer help+examples, `!help world`, `!help home`, and a narrative beat after key commands.
 
 Update v4.4: Choose-Your-Own-Adventure engine with branching nodes, `!adv`, `!choose`, `!choices`, and on-page choice buttons.
+
+Update v4.5: Adventure upgrades (locked choices + inventory + random encounters) and a tiny live world-map panel. Help + Quick Starts updated.
