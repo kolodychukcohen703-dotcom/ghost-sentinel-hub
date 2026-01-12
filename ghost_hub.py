@@ -1407,7 +1407,14 @@ def on_join(data):
     user = (user or "guest").strip()[:48] or "guest"
 
     rooms = (data or {}).get("rooms") or []
-    active = (data or {}).get("active") or (data or {}).get("room") or MAIN_ROOM
+    legacy_room = (data or {}).get("room")
+    active = (data or {}).get("active") or legacy_room or MAIN_ROOM
+
+    # Back-compat: older clients send only {"room": "#x"} for joining.
+    # If rooms isn't provided, treat legacy_room as the room list.
+    if (not rooms) and legacy_room and str(legacy_room).strip():
+        rooms = [legacy_room]
+
 
     # Always include lobby
     if MAIN_ROOM not in rooms:
