@@ -339,7 +339,7 @@ def _get_room_history(room: str, limit: int = ROOM_HISTORY_ON_JOIN):
 
 def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
     ts = ts or utc_ts()
-    _log_room_message(room, sender, msg, ts)
+    _log_room_message(room, user, msg, ts)
     emit("chat_message", {"room": room, "sender": sender, "msg": msg, "ts": ts}, to=to_target)
 
 
@@ -1883,7 +1883,7 @@ def api_chat():
 
     payload = {"room": room, "sender": sender, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
-    _log_room_message(room, sender, msg, payload.get("ts", utc_ts()))
+    _log_room_message(room, user, msg, payload.get("ts", utc_ts()))
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, sender, msg)
@@ -2443,7 +2443,7 @@ def on_send_message(data):
 
     payload = {"room": room, "sender": user, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
-    _log_room_message(room, sender, msg, payload.get("ts", utc_ts()))
+    _log_room_message(room, user, msg, payload.get("ts", utc_ts()))
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, user, msg)
