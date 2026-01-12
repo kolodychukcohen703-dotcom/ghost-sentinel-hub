@@ -49,6 +49,23 @@ _dm_lock = Lock()
 
 MAIN_ROOM = "#lobby"
 ROOM_HISTORY_MAX = 250
+
+# --- World Nodes: per-room persistent state (in-memory) ---
+def _default_world_state():
+    return {
+        "biome": "—",
+        "tier": "bronze",
+        "tone": "gentle",
+        "weather": "clear",
+        "rooms": [],
+        "items": [],
+        "secure_channel": False,
+        "vault_locked": False,
+        "homes": {},  # handle -> list[str]
+    }
+
+_world_state_by_room = defaultdict(_default_world_state)
+
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
 
 
@@ -1173,19 +1190,34 @@ def maybe_run_bot(room: str, user: str, msg: str):
     _bot_emit(room, "Unknown command. Try: !help")
 
 
-def _emit_user_list():
-    with _presence_lock:
-        users = [{"sid": u.get("sid", ""), "name": u.get("name", "guest"), "room": u.get("room", MAIN_ROOM)} for u in _online.values()]
-    # Backfill missing sid values (older entries)
-    if users:
-        online_keys = list(_online.keys())
-        for i,u in enumerate(users):
-            if not u.get("sid") and i < len(online_keys):
-                u["sid"] = online_keys[i]
 
+def _emit_user_list():
+    """Emit presence for all connected users (summary list)."""
+    with _presence_lock:
+        users = []
+        for sid, u in _online.items():
+            users.append({
+                "sid": sid,
+                "name": u.get("name", "guest"),
+                "room": u.get("room", MAIN_ROOM),      # active room
+                "rooms": u.get("rooms") or [u.get("room", MAIN_ROOM)],
+            })
     users.sort(key=lambda x: (x["name"].lower(), x["sid"]))
     socketio.emit("user_list_update", {"room": MAIN_ROOM, "users": users})
 
+
+def _emit_room_user_list(room: str):
+    """Emit users currently in a specific room."""
+    room = room or MAIN_ROOM
+    if not room.startswith("#"):
+        room = "#" + room
+    with _presence_lock:
+        users = []
+        for sid, u in _online.items():
+            rooms = u.get("rooms") or [u.get("room", MAIN_ROOM)]
+            if room in rooms:
+                users.append({"sid": sid, "name": u.get("name", "guest"), "room": room})
+    emit("room_users", {"room": room, "users": users}, to=room)
 
 def _dm_key(a: str, b: str) -> Tuple[str, str]:
     return tuple(sorted([a, b]))
@@ -1282,7 +1314,7 @@ def on_connect():
     # sid exists here; name set on join
     sid = request.sid
     with _presence_lock:
-        _online[sid] = {"sid": sid, "sid": sid, "name": "guest", "room": MAIN_ROOM, "last_seen": utc_ts()}
+        _online[sid] = {"sid": sid, "sid": sid, "sid": sid, "name": "guest", "room": MAIN_ROOM, "last_seen": utc_ts()}
     _emit_user_list()
 
 
@@ -1300,7 +1332,8 @@ def on_disconnect():
             except Exception:
                 pass
 
-    _emit_user_list()
+    _emit_room_user_list(MAIN_ROOM)
+_emit_user_list()
 
 
 @socketio.on("join")
@@ -1394,12 +1427,20 @@ def on_leave(data):
 
 
 
+
 @socketio.on("list_rooms")
 def on_list_rooms(_data=None):
     # "Running" rooms are those with at least one member; always include lobby
     counts = _room_counts()
     counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
-    rooms = [{"room": r, "count": c} for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+
+    rooms = []
+    for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        st = _world_state_by_room[r]
+        homes = st.get("homes") or {}
+        homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
+        rooms.append({"room": r, "count": c, "homes": homes_count})
+
     emit("rooms_list", {"rooms": rooms})
 
 
@@ -1421,19 +1462,68 @@ def on_send_message(data):
     if not msg:
         return
 
-    # Server-side /list convenience
+    # /list: running channels
     if msg in ("/list", "!list"):
         counts = _room_counts()
         counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
         for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-            emit("chat_message", {"room": room, "sender": "hub", "msg": f"{r}  ({c} online)", "ts": utc_ts()}, to=sid)
+            st = _world_state_by_room[r]
+        homes = (st.get("homes") or {})
+        homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"{r}  ({c} online, {homes_count} homes)", "ts": utc_ts()}, to=sid)
         return
+
+    # /who: who is in this world node
+    if msg in ("/who", "!who"):
+        with _presence_lock:
+            names = []
+            for sid2, u in _online.items():
+                rooms2 = u.get("rooms") or [u.get("room", MAIN_ROOM)]
+                if room in rooms2:
+                    names.append(u.get("name", "guest"))
+        emit("chat_message", {"room": room, "sender": "hub", "msg": "Here now: " + (", ".join(sorted(set(names))) if names else "—"), "ts": utc_ts()}, to=sid)
+        return
+
+    # /worlds (aka nodes): list active rooms with counts
+    if msg in ("/worlds", "/nodes", "!worlds", "!nodes"):
+        counts = _room_counts()
+        counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
+        lines = [f"{r} ({c})" for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+        emit("chat_message", {"room": room, "sender": "hub", "msg": "World nodes: " + (" | ".join(lines) if lines else "—"), "ts": utc_ts()}, to=sid)
+        return
+
+    # /msg @name text  -> whisper to a user in any shared room
+    if msg.startswith("/msg "):
+        rest = msg[5:].strip()
+        if rest.startswith("@"):
+            parts = rest.split(" ", 1)
+            target = parts[0].lstrip("@").strip().lower()
+            text = parts[1] if len(parts) > 1 else ""
+            if not text.strip():
+                emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /msg @name hello there", "ts": utc_ts()}, to=sid)
+                return
+            target_sid = None
+            with _presence_lock:
+                my_rooms = set((_online.get(sid) or {}).get("rooms") or [room])
+                for sid2, u in _online.items():
+                    if u.get("name", "").strip().lower() == target:
+                        rooms2 = set(u.get("rooms") or [u.get("room", MAIN_ROOM)])
+                        if my_rooms.intersection(rooms2):
+                            target_sid = sid2
+                            break
+            if not target_sid:
+                emit("chat_message", {"room": room, "sender": "hub", "msg": f"Could not find @{target} in your worlds.", "ts": utc_ts()}, to=sid)
+                return
+            emit("whisper", {"from": user, "to": target, "msg": text, "ts": utc_ts()}, to=target_sid)
+            emit("whisper", {"from": user, "to": target, "msg": text, "ts": utc_ts()}, to=sid)
+            return
 
     payload = {"room": room, "sender": user, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, user, msg)
+
 
 @socketio.on("dm_open")
 def on_dm_open(data):
