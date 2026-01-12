@@ -278,6 +278,9 @@ Homes (Phase 4)
   !home mine                List your homes in this world
   !home remove <id>         Remove a home (creator or world manager)
 
+Astro (template adventure)
+  !astro help                Astrology-guided adventure prompts (optional)
+
 Notes
   - Room history loads automatically when you join a world.
   - Worlds, roles, homes, and logs persist at /var/data/worlds.db.
@@ -338,6 +341,192 @@ def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
     ts = ts or utc_ts()
     _log_room_message(room, sender, msg, ts)
     emit("chat_message", {"room": room, "sender": sender, "msg": msg, "ts": ts}, to=to_target)
+
+
+# --- Astro Adventure (Gently Wired) ---
+ASTRO_SCENE_CHOICES = ["A", "B", "C"]
+
+def _db_init_astro():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS astro_profiles (
+            user TEXT PRIMARY KEY,
+            dob TEXT,
+            tob TEXT,
+            tz TEXT,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS astro_sessions (
+            user TEXT,
+            room TEXT,
+            scene_id TEXT,
+            state_json TEXT,
+            updated_at TEXT,
+            PRIMARY KEY(user, room)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _astro_get_profile(user: str):
+    _db_init_astro()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT dob, tob, tz FROM astro_profiles WHERE user=?", (user,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return {"user": user, "dob": "", "tob": "", "tz": ""}
+    return {"user": user, "dob": row[0] or "", "tob": row[1] or "", "tz": row[2] or ""}
+
+def _astro_set_profile(user: str, dob=None, tob=None, tz=None):
+    _db_init_astro()
+    p = _astro_get_profile(user)
+    if dob is not None: p["dob"] = dob
+    if tob is not None: p["tob"] = tob
+    if tz is not None: p["tz"] = tz
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO astro_profiles(user, dob, tob, tz, updated_at)
+        VALUES(?,?,?,?,?)
+        ON CONFLICT(user) DO UPDATE SET
+            dob=excluded.dob,
+            tob=excluded.tob,
+            tz=excluded.tz,
+            updated_at=excluded.updated_at
+    """, (user, p["dob"], p["tob"], p["tz"], datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+    return p
+
+def _astro_get_session(user: str, room: str):
+    _db_init_astro()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT scene_id, state_json FROM astro_sessions WHERE user=? AND room=?", (user, room))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return {"user": user, "room": room, "scene_id": "", "state": {}}
+    scene_id = row[0] or ""
+    try:
+        state = json.loads(row[1] or "{}")
+    except Exception:
+        state = {}
+    return {"user": user, "room": room, "scene_id": scene_id, "state": state}
+
+def _astro_set_session(user: str, room: str, scene_id: str, state: dict):
+    _db_init_astro()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO astro_sessions(user, room, scene_id, state_json, updated_at)
+        VALUES(?,?,?,?,?)
+        ON CONFLICT(user, room) DO UPDATE SET
+            scene_id=excluded.scene_id,
+            state_json=excluded.state_json,
+            updated_at=excluded.updated_at
+    """, (user, room, scene_id, json.dumps(state or {}, ensure_ascii=False), datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def _astro_time_bucket(tob: str):
+    try:
+        hh = int((tob or "0:0").split(":")[0])
+    except Exception:
+        hh = 0
+    if 5 <= hh < 11: return "morning"
+    if 11 <= hh < 17: return "day"
+    if 17 <= hh < 22: return "evening"
+    return "night"
+
+def _astro_sun_sign(dob: str):
+    try:
+        y,m,d = [int(x) for x in dob.split("-")]
+    except Exception:
+        return ""
+    mmdd = m*100 + d
+    if 321 <= mmdd <= 419: return "Aries"
+    if 420 <= mmdd <= 520: return "Taurus"
+    if 521 <= mmdd <= 620: return "Gemini"
+    if 621 <= mmdd <= 722: return "Cancer"
+    if 723 <= mmdd <= 822: return "Leo"
+    if 823 <= mmdd <= 922: return "Virgo"
+    if 923 <= mmdd <= 1022: return "Libra"
+    if 1023 <= mmdd <= 1121: return "Scorpio"
+    if 1122 <= mmdd <= 1221: return "Sagittarius"
+    if mmdd >= 1222 or mmdd <= 119: return "Capricorn"
+    if 120 <= mmdd <= 218: return "Aquarius"
+    if 219 <= mmdd <= 320: return "Pisces"
+    return ""
+
+def _astro_scene(user: str, room: str):
+    p = _astro_get_profile(user)
+    sun = _astro_sun_sign(p.get("dob",""))
+    bucket = _astro_time_bucket(p.get("tob",""))
+    meta = _get_world_meta(room) or {}
+    icon = meta.get("icon","")
+    name, desc = _format_world_label(room)
+    tone = "dreamlike" if bucket in ("night","evening") else "grounded"
+    if sun in ("Cancer","Pisces","Scorpio"):
+        tone = "dreamlike"
+    if sun in ("Virgo","Capricorn","Taurus"):
+        tone = "grounded"
+    title = f"{icon+' ' if icon else ''}{name} — The Door That Mirrors You"
+    text = (
+        f"Tone: {tone}. "
+        f"You arrive in {name}. {desc or ''} "
+        f"A page in your life-book turns itself. "
+        f"(Sun: {sun or 'unknown'} • Birth-time: {bucket})"
+    ).strip()
+    choices = [
+        {"id":"A", "label":"Enter the quiet room and listen for a memory."},
+        {"id":"B", "label":"Walk the boundary of this world and mark a safe path."},
+        {"id":"C", "label":"Sketch a new room for your home here (a seed, not a command)."},
+    ]
+    return {"scene_id": "astro_001", "title": title, "text": text, "choices": choices, "hint": "Reply with: !astro choice A/B/C"}
+
+def _astro_advance(scene_id: str, choice: str):
+    choice = (choice or "").upper().strip()
+    if choice == "A":
+        return {
+            "scene_id": "astro_002A",
+            "title": "A — The Memory Room",
+            "text": "A drawer slides open by itself. It holds a small symbol you forgot you carried. You can keep it as a flag in this world.",
+            "choices":[
+                {"id":"A", "label":"Name the symbol (one word)."},
+                {"id":"B", "label":"Ask the world for a gentle task."},
+                {"id":"C", "label":"Return to the main corridor."},
+            ],
+            "hint":"Try: !astro say <one-word>  (or !astro start to reset)"
+        }
+    if choice == "B":
+        return {
+            "scene_id": "astro_002B",
+            "title": "B — The Boundary Walk",
+            "text": "You pace the edges and place three invisible lanterns. Each lantern becomes a rule: be kind, be clear, be steady.",
+            "choices":[
+                {"id":"A", "label":"Set one rule as your oath today."},
+                {"id":"B", "label":"Invite a helper into this world (symbolically)."},
+                {"id":"C", "label":"Return to the main corridor."},
+            ],
+            "hint":"Try: !astro say <oath>  (or !astro start)"
+        }
+    return {
+        "scene_id": "astro_002C",
+        "title": "C — The New Room Seed",
+        "text": "A blueprint appears. It does not force itself into reality — it waits for your words. Describe the room and the builder can act when you choose.",
+        "choices":[
+            {"id":"A", "label":"Describe the room in one sentence."},
+            {"id":"B", "label":"Describe the mood + lighting."},
+            {"id":"C", "label":"Return to the main corridor."},
+        ],
+        "hint":"Try: !astro say <your room seed>  (then optionally use your normal builder command)"
+    }
 # --- World Roles (Phase 3) ---
 def _db_init_world_roles():
     conn = sqlite3.connect(DB_PATH)
@@ -2130,6 +2319,87 @@ def on_send_message(data):
     if msg in ("!help", "/help", "!commands"):
         for line in COMPREHENSIVE_HELP_TEXT.strip().splitlines():
             _emit_chat(sid, room, "hub", line)
+        return
+
+
+    # !astro ... (Gently wired)
+    if msg == "!astro" or msg.startswith("!astro "):
+        parts = msg.split(" ", 2)
+        sub = parts[1].lower() if len(parts) > 1 else "help"
+        rest = parts[2] if len(parts) > 2 else ""
+
+        if sub in ("help","?"):
+            _emit_chat(sid, room, "hub", "Astro: !astro profile | !astro set dob YYYY-MM-DD | !astro set tob HH:MM | !astro set tz Region/City | !astro start | !astro choice A/B/C | !astro say <text>")
+            return
+
+        if sub == "profile":
+            p = _astro_get_profile(user)
+            _emit_chat(sid, room, "hub", f"Astro profile for @{user}: dob={p.get('dob') or '—'} tob={p.get('tob') or '—'} tz={p.get('tz') or '—'}")
+            _emit_chat(sid, room, "hub", "Set: !astro set dob 1990-01-01  |  !astro set tob 13:45  |  !astro set tz America/Vancouver")
+            return
+
+        if sub == "set":
+            bits = rest.split()
+            if len(bits) < 2:
+                _emit_chat(sid, room, "hub", "Usage: !astro set dob YYYY-MM-DD | !astro set tob HH:MM | !astro set tz Region/City")
+                return
+            key = bits[0].lower()
+            val = bits[1].strip()
+            if key == "dob":
+                _astro_set_profile(user, dob=val)
+            elif key == "tob":
+                _astro_set_profile(user, tob=val)
+            elif key == "tz":
+                _astro_set_profile(user, tz=val)
+            else:
+                _emit_chat(sid, room, "hub", "Unknown field. Use dob/tob/tz.")
+                return
+            _emit_chat(sid, room, "hub", "Saved. Try: !astro start")
+            return
+
+        if sub == "start":
+            s = _astro_scene(user, room)
+            _astro_set_session(user, room, s["scene_id"], {"last_choice": "", "notes": []})
+            _emit_chat(sid, room, "ghost-bot", s["title"])
+            _emit_chat(sid, room, "ghost-bot", s["text"])
+            for c in s["choices"]:
+                _emit_chat(sid, room, "ghost-bot", f"{c['id']} — {c['label']}")
+            _emit_chat(sid, room, "ghost-bot", s.get("hint",""))
+            return
+
+        if sub == "choice":
+            ch = (rest or "").strip().upper()[:1]
+            if ch not in ("A","B","C"):
+                _emit_chat(sid, room, "hub", "Choose A, B, or C. Example: !astro choice B")
+                return
+            sess = _astro_get_session(user, room)
+            s = _astro_advance(sess.get("scene_id","astro_001") or "astro_001", ch)
+            st = sess.get("state") or {}
+            st["last_choice"] = ch
+            _astro_set_session(user, room, s["scene_id"], st)
+            _emit_chat(sid, room, "ghost-bot", s["title"])
+            _emit_chat(sid, room, "ghost-bot", s["text"])
+            for c in s["choices"]:
+                _emit_chat(sid, room, "ghost-bot", f"{c['id']} — {c['label']}")
+            _emit_chat(sid, room, "ghost-bot", s.get("hint",""))
+            return
+
+        if sub == "say":
+            txt = (rest or "").strip()
+            if not txt:
+                _emit_chat(sid, room, "hub", "Usage: !astro say <text>")
+                return
+            sess = _astro_get_session(user, room)
+            st = sess.get("state") or {}
+            notes = st.get("notes") or []
+            notes.append({"ts": utc_ts(), "text": txt})
+            st["notes"] = notes[-25:]
+            _astro_set_session(user, room, sess.get("scene_id","") or "astro_001", st)
+            _emit_chat(room, room, user, f"[astro] {txt}")
+            _emit_chat(sid, room, "hub", "Saved to your astro thread for this world. Continue with !astro choice A/B/C or reset with !astro start.")
+            return
+
+        _emit_chat(sid, room, "hub", "Unknown astro command. Try: !astro help")
         return
 
     # /worlds (aka nodes): list active rooms with counts
