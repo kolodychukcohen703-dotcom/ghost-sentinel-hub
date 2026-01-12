@@ -1517,6 +1517,7 @@ def on_list_rooms(_data=None):
     emit("rooms_list", {"rooms": rooms})
 
 
+
 @socketio.on("send_message")
 def on_send_message(data):
     sid = request.sid
@@ -1541,9 +1542,90 @@ def on_send_message(data):
         counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
         for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
             st = _world_state_by_room[r]
-        homes = (st.get("homes") or {})
-        homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"{r}  ({c} online, {homes_count} homes)", "ts": utc_ts()}, to=sid)
+            homes = (st.get("homes") or {})
+            homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
+            emit("chat_message", {"room": room, "sender": "hub", "msg": f"{r}  ({c} online, {homes_count} homes)", "ts": utc_ts()}, to=sid)
+        return
+
+    # IRC-style join/part even if client didn't intercept
+    if msg.startswith("/join "):
+        target = msg[6:].strip()
+        if not target:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /join #room", "ts": utc_ts()}, to=sid)
+            return
+        if not target.startswith("#"):
+            target = "#" + target
+
+        # Join socket room
+        join_room(target)
+        _room_members[target].add(sid)
+        _ = _room_history[target]
+
+        with _presence_lock:
+            entry = _online.get(sid) or {"sid": sid, "name": user}
+            rooms = entry.get("rooms") or [entry.get("room", MAIN_ROOM)]
+            if target not in rooms:
+                rooms.append(target)
+            entry["rooms"] = rooms[:32]
+            entry["room"] = target  # focus active room
+            entry["name"] = user
+            entry["last_seen"] = utc_ts()
+            _online[sid] = entry
+
+        # Load persisted world state and emit to joining sid
+        try:
+            st = _load_world_state(target)
+            _world_state_by_room[target] = st
+            emit("world_state", st, to=sid)
+        except Exception:
+            pass
+
+        # Send history for new room to joining sid
+        emit("chat_history", {"room": target, "items": list(_room_history[target])}, to=sid)
+
+        _emit_user_list()
+        _emit_room_user_list(target)
+        _emit_room_user_list(MAIN_ROOM)
+
+        notice = {"room": target, "sender": "hub", "msg": f"{user} joined {target}", "ts": utc_ts()}
+        _room_history[target].append(notice)
+        emit("chat_message", notice, to=target)
+        return
+
+    if msg.startswith("/part "):
+        target = msg[6:].strip()
+        if not target:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /part #room", "ts": utc_ts()}, to=sid)
+            return
+        if not target.startswith("#"):
+            target = "#" + target
+        if target == MAIN_ROOM:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "You cannot leave #lobby.", "ts": utc_ts()}, to=sid)
+            return
+
+        leave_room(target)
+        try:
+            _room_members[target].discard(sid)
+        except Exception:
+            pass
+
+        with _presence_lock:
+            entry = _online.get(sid) or {"sid": sid, "name": user, "room": MAIN_ROOM, "rooms": [MAIN_ROOM]}
+            rooms = entry.get("rooms") or [entry.get("room", MAIN_ROOM)]
+            rooms = [r for r in rooms if r != target]
+            if MAIN_ROOM not in rooms:
+                rooms.insert(0, MAIN_ROOM)
+            entry["rooms"] = rooms[:32]
+            # if leaving active room, focus lobby
+            if entry.get("room") == target:
+                entry["room"] = MAIN_ROOM
+            _online[sid] = entry
+
+        _emit_user_list()
+        _emit_room_user_list(target)
+        _emit_room_user_list(MAIN_ROOM)
+
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Left {target}.", "ts": utc_ts()}, to=sid)
         return
 
     # /who: who is in this world node
@@ -1561,7 +1643,12 @@ def on_send_message(data):
     if msg in ("/worlds", "/nodes", "!worlds", "!nodes"):
         counts = _room_counts()
         counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
-        lines = [f"{r} ({c})" for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+        lines = []
+        for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+            st = _world_state_by_room[r]
+            homes = (st.get("homes") or {})
+            homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
+            lines.append(f"{r} ({c} online, {homes_count} homes)")
         emit("chat_message", {"room": room, "sender": "hub", "msg": "World nodes: " + (" | ".join(lines) if lines else "—"), "ts": utc_ts()}, to=sid)
         return
 

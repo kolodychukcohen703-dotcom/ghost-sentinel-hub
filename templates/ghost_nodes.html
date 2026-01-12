@@ -712,6 +712,16 @@ let mySid = null;
     document.getElementById("joinBtn").addEventListener("click", joinLobby);
 
     // PBX quick-dial helpers
+    function handleInput(msg){
+      msg = (msg||"").trim();
+      if(!msg) return;
+      if(msg === "/list"){ socket.emit("list_rooms", {}); return; }
+      if(msg.startsWith("/join ")){ joinRoomClient(msg.slice(6).trim()); return; }
+      if(msg.startsWith("/part ")){ partRoomClient(msg.slice(6).trim()); return; }
+      if(msg.startsWith("/worlds") || msg.startsWith("/nodes") || msg === "/who" || msg.startsWith("/msg ")){ sendChat(msg); return; }
+      sendChat(msg);
+    }
+
     function sendChat(text) {
       if (!socket || !joined) return;
       const user = (document.getElementById("userName").value || "guest").trim() || "guest";
