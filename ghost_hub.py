@@ -1,5 +1,4 @@
 
-
 # --- Home Create Flags (Phase 6) ---
 def _parse_home_create_args(raw: str):
     """Parse: !home create "desc" --style X --size Y --mood 🙂
@@ -50,6 +49,7 @@ def _home_display(home: dict):
     if size: parts.append(f"size:{size}")
     if desc: parts.append(desc)
     return " • ".join(parts)
+
 #!/usr/bin/env python3
 """
 Ghost Sentinel Hub — Lobby + Presence + DMs + Sealed Rune Cipher (v4)
@@ -344,10 +344,14 @@ Ownership / Roles (Phase 3)
   !world addhelper @name    (Owner) add helper
   !world delhelper @name    (Owner) remove helper
 
-Homes (Phase 4)
-  !home list                List homes in this world
-  !home mine                List your homes in this world
-  !home remove <id>         Remove a home (creator or world manager)
+Homes (Phase 4 + Phase 6)
+  !home add "Room Name" --style X --size Y          Add a room to this world-home
+  !home door add --from "Room" --to "Room"        Link rooms with a door
+  !map                                             Show world + rooms + doors
+  !home create "desc" --style X --size Y --mood 🙂   Create a home entry with metadata
+  !home list                                        List saved home entries (and rooms summary)
+  !home mine                                        List your home entries
+  !home remove <id>                                 Remove a home entry (creator or world manager)
 
 Astro (template adventure)
   !astro help                Astrology-guided adventure prompts (optional)
@@ -2339,7 +2343,7 @@ def on_send_message(data):
     if msg in ("!home list", "!homes", "!home all"):
         allh = _all_homes_in_world(room)
         if not allh:
-            _emit_chat(sid, room, "hub", "No homes built in this world yet.")
+            _emit_chat(sid, room, "hub", "No saved home entries yet — rooms/doors may still exist. Try: !map or create one with: !home create <desc> --style X --size Y --mood 🙂")
             return
         lines = [f"{h.get('id')} — {h.get('name','home')} (@{h.get('created_by','?')})" for h in allh[:30]]
         _emit_chat(sid, room, "hub", "Homes: " + " | ".join(lines))
