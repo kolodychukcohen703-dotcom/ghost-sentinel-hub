@@ -550,7 +550,18 @@ let mySid = null;
           socket.emit("join", { room: mainRoom, user: stored });
           
 
-      socket.on("joined_room", (p) => {
+      
+      socket.on("world_meta", (m) => {
+        try{
+          const el = document.getElementById("worldMeta");
+          if(!el || !m) return;
+          const icon = (m.icon||"").trim();
+          const name = (m.name||m.room||"").trim();
+          const desc = (m.description||"").trim();
+          el.textContent = `${icon?icon+" ":""}${name}${desc?(" — "+desc):""}`;
+        }catch(e){}
+      });
+socket.on("joined_room", (p) => {
         try{
           const r = (p && p.room) || "#lobby";
           const rooms = (p && p.rooms) || [r];

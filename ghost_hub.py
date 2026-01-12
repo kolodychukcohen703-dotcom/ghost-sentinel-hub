@@ -83,6 +83,64 @@ def _db_init():
         finally:
             conn.close()
 
+
+
+# --- World Metadata (Phase 2) ---
+def _db_init_world_meta():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS world_meta (
+            room TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            icon TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _seed_world_meta_if_empty():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM world_meta")
+    row = cur.fetchone()
+    count = row[0] if row else 0
+    if count == 0:
+        seeds = {
+            "#lobby": ("Lobby", "The central crossing point", "🌐"),
+            "#101-kathleen": ("Kathleen’s World", "Gentle, soft-lit, safe.", "🕊️"),
+            "#102-diane": ("Diane’s World", "Memory shelves, careful conversation.", "📚"),
+            "#witness-hall": ("Witness Hall", "A high, echoing chamber where witnesses leave messages.", "🏛️"),
+            "#terminal": ("Terminal", "Plain text console room for pure thinking.", "💻"),
+        }
+        now = datetime.utcnow().isoformat()
+        for room,(name,desc,icon) in seeds.items():
+            cur.execute(
+                "INSERT OR IGNORE INTO world_meta (room,name,description,icon,updated_at) VALUES (?,?,?,?,?)",
+                (room, name, desc, icon, now)
+            )
+        conn.commit()
+    conn.close()
+
+def _get_world_meta(room: str):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT name, description, icon FROM world_meta WHERE room=?", (room,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return {"room": room, "name": row[0], "description": row[1], "icon": row[2]}
+    return {"room": room, "name": room, "description": "", "icon": ""}
+
+def _format_world_label(room: str):
+    m = _get_world_meta(room)
+    icon = (m.get("icon") or "").strip()
+    name = (m.get("name") or room).strip()
+    desc = (m.get("description") or "").strip()
+    label = (icon + " " if icon else "") + name
+    return label, desc
 def _load_world_state(room: str):
     """Load a room's world state from SQLite into memory (idempotent)."""
     room = (room or MAIN_ROOM).strip()
@@ -130,6 +188,8 @@ def _save_world_state(room: str):
 
 _db_init()
 
+_db_init_world_meta()
+_seed_world_meta_if_empty()
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
 
 
@@ -1577,6 +1637,7 @@ def on_send_message(data):
             st = _load_world_state(target)
             _world_state_by_room[target] = st
             emit("world_state", st, to=sid)
+            emit("world_meta", _get_world_meta(target), to=sid)
         except Exception:
             pass
 
@@ -1641,6 +1702,20 @@ def on_send_message(data):
                 if room in rooms2:
                     names.append(u.get("name", "guest"))
         emit("chat_message", {"room": room, "sender": "hub", "msg": "Here now: " + (", ".join(sorted(set(names))) if names else "—"), "ts": utc_ts()}, to=sid)
+        return
+
+    # !world info / !world list (Phase 2)
+    if msg in ("!world", "!world info"):
+        label, desc = _format_world_label(room)
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"{label} — {desc}", "ts": utc_ts()}, to=sid)
+        return
+
+    if msg in ("!world list", "!worlds"):
+        counts = _room_counts()
+        counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
+        for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+            label, desc = _format_world_label(r)
+            emit("chat_message", {"room": room, "sender": "hub", "msg": f"{label} — {desc}", "ts": utc_ts()}, to=sid)
         return
 
     # /worlds (aka nodes): list active rooms with counts
