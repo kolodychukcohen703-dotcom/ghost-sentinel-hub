@@ -1175,7 +1175,14 @@ def maybe_run_bot(room: str, user: str, msg: str):
 
 def _emit_user_list():
     with _presence_lock:
-        users = [{"sid": u["sid"], "name": u.get("name", "guest"), "room": u.get("room", MAIN_ROOM)} for u in _online.values()]
+        users = [{"sid": u.get("sid", ""), "name": u.get("name", "guest"), "room": u.get("room", MAIN_ROOM)} for u in _online.values()]
+    # Backfill missing sid values (older entries)
+    if users:
+        online_keys = list(_online.keys())
+        for i,u in enumerate(users):
+            if not u.get("sid") and i < len(online_keys):
+                u["sid"] = online_keys[i]
+
     users.sort(key=lambda x: (x["name"].lower(), x["sid"]))
     socketio.emit("user_list_update", {"room": MAIN_ROOM, "users": users})
 
@@ -1275,7 +1282,7 @@ def on_connect():
     # sid exists here; name set on join
     sid = request.sid
     with _presence_lock:
-        _online[sid] = {"sid": sid, "name": "guest", "room": MAIN_ROOM, "last_seen": utc_ts()}
+        _online[sid] = {"sid": sid, "sid": sid, "name": "guest", "room": MAIN_ROOM, "last_seen": utc_ts()}
     _emit_user_list()
 
 
