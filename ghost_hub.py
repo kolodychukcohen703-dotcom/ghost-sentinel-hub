@@ -247,6 +247,97 @@ def _export_world(room: str):
         "stats": _world_stats(room),
     }
     return payload
+
+
+# --- Room Logs (Final) ---
+ROOM_LOG_LIMIT = 200
+ROOM_HISTORY_ON_JOIN = 50
+
+COMPREHENSIVE_HELP_TEXT = """Ghost Sentinel Hub — Commands
+
+Basics (IRC-style)
+  /list                     List worlds (channels)
+  /join #room               Join a world (you can be in multiple)
+  /part #room               Leave a world
+  /rooms                    Alias of /list
+
+Worlds (Phase 2–5)
+  !world                    Show info for the current world
+  !world list               List worlds with descriptions
+  !world stats              Show counts for current world
+  !world export             Export current world as JSON (chat output)
+
+Ownership / Roles (Phase 3)
+  !world claim              Claim this world as owner (if unclaimed)
+  !world owners             Show owner + helpers
+  !world addhelper @name    (Owner) add helper
+  !world delhelper @name    (Owner) remove helper
+
+Homes (Phase 4)
+  !home list                List homes in this world
+  !home mine                List your homes in this world
+  !home remove <id>         Remove a home (creator or world manager)
+
+Notes
+  - Room history loads automatically when you join a world.
+  - Worlds, roles, homes, and logs persist at /var/data/worlds.db.
+"""
+
+
+def _db_init_room_logs():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS room_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room TEXT,
+            ts TEXT,
+            sender TEXT,
+            msg TEXT
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_room_logs_room_ts ON room_logs(room, ts)")
+    conn.commit()
+    conn.close()
+
+def _log_room_message(room: str, sender: str, msg: str, ts: str):
+    try:
+        _db_init_room_logs()
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO room_logs(room, ts, sender, msg) VALUES (?,?,?,?)", (room, ts, sender, msg))
+        # prune old logs for that room
+        cur.execute("""
+            DELETE FROM room_logs
+            WHERE id IN (
+                SELECT id FROM room_logs
+                WHERE room = ?
+                ORDER BY id DESC
+                LIMIT -1 OFFSET ?
+            )
+        """, (room, ROOM_LOG_LIMIT))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def _get_room_history(room: str, limit: int = ROOM_HISTORY_ON_JOIN):
+    try:
+        _db_init_room_logs()
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT ts, sender, msg FROM room_logs WHERE room=? ORDER BY id DESC LIMIT ?", (room, int(limit)))
+        rows = cur.fetchall()
+        conn.close()
+        rows.reverse()
+        return [{"room": room, "ts": r[0], "sender": r[1], "msg": r[2]} for r in rows]
+    except Exception:
+        return []
+
+def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
+    ts = ts or utc_ts()
+    _log_room_message(room, sender, msg, ts)
+    emit("chat_message", {"room": room, "sender": sender, "msg": msg, "ts": ts}, to=to_target)
 # --- World Roles (Phase 3) ---
 def _db_init_world_roles():
     conn = sqlite3.connect(DB_PATH)
@@ -1212,7 +1303,12 @@ def _emit_world_state(room: str):
 def _bot_emit(room: str, msg: str):
     payload = {"room": room, "sender": BOT_NAME, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
-    socketio.emit("chat_message", payload, to=room)
+    try:
+        _log_room_message(room, BOT_NAME, msg, payload.get("ts", utc_ts()))
+    except Exception:
+        pass
+    emit("chat_message", payload, to=room)
+
 
 
 def _parse_args(text: str):
@@ -1598,7 +1694,8 @@ def api_chat():
 
     payload = {"room": room, "sender": sender, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
-    socketio.emit("chat_message", payload, to=room)
+    _log_room_message(room, sender, msg, payload.get("ts", utc_ts()))
+    emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, sender, msg)
     return jsonify({"ok": True})
@@ -1786,13 +1883,19 @@ def on_send_message(data):
     if msg.startswith("/join "):
         target = msg[6:].strip()
         if not target:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /join #room", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Usage: /join #room")
             return
         if not target.startswith("#"):
             target = "#" + target
 
         # Join socket room
         join_room(target)
+
+        # send room history
+
+        for m in _get_room_history(target, ROOM_HISTORY_ON_JOIN):
+
+            emit("chat_message", m, to=sid)
         _room_members[target].add(sid)
         _ = _room_history[target]
 
@@ -1836,12 +1939,12 @@ def on_send_message(data):
     if msg.startswith("/part "):
         target = msg[6:].strip()
         if not target:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /part #room", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Usage: /part #room")
             return
         if not target.startswith("#"):
             target = "#" + target
         if target == MAIN_ROOM:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "You cannot leave #lobby.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "You cannot leave #lobby.")
             return
 
         leave_room(target)
@@ -1867,7 +1970,7 @@ def on_send_message(data):
         _emit_room_user_list(MAIN_ROOM)
 
         emit("joined_room", {"room": (_online.get(sid) or {}).get("room", MAIN_ROOM), "rooms": (_online.get(sid) or {}).get("rooms", [MAIN_ROOM])}, to=sid)
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Left {target}.", "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", f"Left {target}.")
         return
 
     # /who: who is in this world node
@@ -1886,10 +1989,10 @@ def on_send_message(data):
         _ensure_world_roles_seeded(room)
         roles = _get_world_roles(room)
         if roles.get("owner"):
-            emit("chat_message", {"room": room, "sender": "hub", "msg": f"Owner already set: @{roles['owner']}.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", f"Owner already set: @{roles['owner']}.")
             return
         _set_world_roles(room, user, [])
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"@{user} claimed {room} as owner.", "ts": utc_ts()}, to=room)
+        _emit_chat(room, room, "hub", f"@{user} claimed {room} as owner.")
         emit("world_roles", _get_world_roles(room), to=sid)
         return
 
@@ -1898,27 +2001,27 @@ def on_send_message(data):
         owner = roles.get("owner") or "—"
         helpers = roles.get("helpers") or []
         hs = (", ".join("@" + h for h in helpers) if helpers else "—")
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Owner: @{owner} | Helpers: {hs}", "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", f"Owner: @{owner} | Helpers: {hs}")
         return
 
     if msg.startswith("!world addhelper ") or msg.startswith("!addhelper "):
         target = msg.split(" ", 2)[2].strip() if msg.startswith("!world addhelper ") else msg.split(" ", 1)[1].strip()
         target = target.lstrip("@").strip()
         if not target:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !world addhelper @name", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Usage: !world addhelper @name")
             return
         roles = _get_world_roles(room)
         if roles.get("owner") == "":
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "No owner set yet. Use !world claim first.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "No owner set yet. Use !world claim first.")
             return
         if not _is_world_owner(room, user):
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Only the world owner can add helpers (Phase 3).", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Only the world owner can add helpers (Phase 3).")
             return
         helpers = roles.get("helpers") or []
         if target.lower() not in [h.lower() for h in helpers]:
             helpers.append(target)
         _set_world_roles(room, roles.get("owner"), helpers)
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Added helper @{target}.", "ts": utc_ts()}, to=room)
+        _emit_chat(room, room, "hub", f"Added helper @{target}.")
         emit("world_roles", _get_world_roles(room), to=sid)
         return
 
@@ -1926,25 +2029,25 @@ def on_send_message(data):
         target = msg.split(" ", 2)[2].strip() if msg.startswith("!world delhelper ") else msg.split(" ", 1)[1].strip()
         target = target.lstrip("@").strip()
         if not target:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !world delhelper @name", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Usage: !world delhelper @name")
             return
         roles = _get_world_roles(room)
         if roles.get("owner") == "":
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "No owner set yet.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "No owner set yet.")
             return
         if not _is_world_owner(room, user):
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Only the world owner can remove helpers (Phase 3).", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Only the world owner can remove helpers (Phase 3).")
             return
         helpers = [h for h in (roles.get("helpers") or []) if h.lower() != target.lower()]
         _set_world_roles(room, roles.get("owner"), helpers)
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Removed helper @{target}.", "ts": utc_ts()}, to=room)
+        _emit_chat(room, room, "hub", f"Removed helper @{target}.")
         emit("world_roles", _get_world_roles(room), to=sid)
         return
 
     # !world info / !world list (Phase 2)
     if msg in ("!world", "!world info"):
         label, desc = _format_world_label(room)
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"{label} — {desc}", "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", f"{label} — {desc}")
         return
 
     if msg in ("!world list", "!worlds"):
@@ -1952,7 +2055,7 @@ def on_send_message(data):
         counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
         for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
             label, desc = _format_world_label(r)
-            emit("chat_message", {"room": room, "sender": "hub", "msg": f"{label} — {desc}", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", f"{label} — {desc}")
         return
 
 
@@ -1967,33 +2070,33 @@ def on_send_message(data):
                 if (h.get("created_by") or "") == u:
                     mine.append(h)
         if not mine:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "You have no homes here yet.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "You have no homes here yet.")
             return
         lines = [f"{h.get('id')} — {h.get('name','home')}" for h in mine[:25]]
-        emit("chat_message", {"room": room, "sender": "hub", "msg": "Your homes: " + " | ".join(lines), "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", "Your homes: " + " | ".join(lines))
         return
 
     if msg in ("!home list", "!homes", "!home all"):
         allh = _all_homes_in_world(room)
         if not allh:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "No homes built in this world yet.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "No homes built in this world yet.")
             return
         lines = [f"{h.get('id')} — {h.get('name','home')} (@{h.get('created_by','?')})" for h in allh[:30]]
-        emit("chat_message", {"room": room, "sender": "hub", "msg": "Homes: " + " | ".join(lines), "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", "Homes: " + " | ".join(lines))
         return
 
     if msg.startswith("!home remove ") or msg.startswith("!home rm "):
         parts = msg.split()
         home_id = parts[2].strip() if len(parts) >= 3 else ""
         if not home_id:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !home remove <id>", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "Usage: !home remove <id>")
             return
         owner, idx, h, st = _find_home(room, home_id)
         if not h:
-            emit("chat_message", {"room": room, "sender": "hub", "msg": f"No home found with id {home_id}.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", f"No home found with id {home_id}.")
             return
         if not _can_delete_home(room, user, h):
-            emit("chat_message", {"room": room, "sender": "hub", "msg": "You don't have permission to remove that home.", "ts": utc_ts()}, to=sid)
+            _emit_chat(sid, room, "hub", "You don't have permission to remove that home.")
             return
         homes = st.get("homes") or {}
         try:
@@ -2002,7 +2105,7 @@ def on_send_message(data):
             pass
         st["homes"] = homes
         _save_world_state(room, st)
-        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Removed home {home_id}.", "ts": utc_ts()}, to=room)
+        _emit_chat(room, room, "hub", f"Removed home {home_id}.")
         return
 
 
@@ -2011,9 +2114,7 @@ def on_send_message(data):
         s = _world_stats(room)
         label, _ = _format_world_label(room)
         owner = s.get("owner") or "—"
-        emit("chat_message", {"room": room, "sender": "hub",
-                              "msg": f"{label} | homes:{s['homes_count']} | msgs:{s['messages_count']} | owner:@{owner}",
-                              "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", f"{label} | homes:{s['homes_count']} | msgs:{s['messages_count']} | owner:@{owner}")
         return
 
     if msg in ("!world export", "!export"):
@@ -2021,7 +2122,14 @@ def on_send_message(data):
         txt = json.dumps(payload, ensure_ascii=False, indent=2)
         if len(txt) > 4000:
             txt = txt[:4000] + "\n... (truncated)"
-        emit("chat_message", {"room": room, "sender": "hub", "msg": "WORLD_EXPORT_JSON\n" + txt, "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", "WORLD_EXPORT_JSON\n" + txt)
+        return
+
+
+    # !help (Final)
+    if msg in ("!help", "/help", "!commands"):
+        for line in COMPREHENSIVE_HELP_TEXT.strip().splitlines():
+            _emit_chat(sid, room, "hub", line)
         return
 
     # /worlds (aka nodes): list active rooms with counts
@@ -2034,7 +2142,7 @@ def on_send_message(data):
             homes = (st.get("homes") or {})
             homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
             lines.append(f"{r} ({c} online, {homes_count} homes)")
-        emit("chat_message", {"room": room, "sender": "hub", "msg": "World nodes: " + (" | ".join(lines) if lines else "—"), "ts": utc_ts()}, to=sid)
+        _emit_chat(sid, room, "hub", "World nodes: " + (" | ".join(lines) if lines else "—"))
         return
 
     # /msg @name text  -> whisper to a user in any shared room
@@ -2045,7 +2153,7 @@ def on_send_message(data):
             target = parts[0].lstrip("@").strip().lower()
             text = parts[1] if len(parts) > 1 else ""
             if not text.strip():
-                emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: /msg @name hello there", "ts": utc_ts()}, to=sid)
+                _emit_chat(sid, room, "hub", "Usage: /msg @name hello there")
                 return
             target_sid = None
             with _presence_lock:
@@ -2057,7 +2165,7 @@ def on_send_message(data):
                             target_sid = sid2
                             break
             if not target_sid:
-                emit("chat_message", {"room": room, "sender": "hub", "msg": f"Could not find @{target} in your worlds.", "ts": utc_ts()}, to=sid)
+                _emit_chat(sid, room, "hub", f"Could not find @{target} in your worlds.")
                 return
             emit("whisper", {"from": user, "to": target, "msg": text, "ts": utc_ts()}, to=target_sid)
             emit("whisper", {"from": user, "to": target, "msg": text, "ts": utc_ts()}, to=sid)
@@ -2065,6 +2173,7 @@ def on_send_message(data):
 
     payload = {"room": room, "sender": user, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
+    _log_room_message(room, sender, msg, payload.get("ts", utc_ts()))
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, user, msg)
