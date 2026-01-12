@@ -551,6 +551,7 @@ let mySid = null;
           
 
       
+      let currentMeta = "";
       socket.on("world_meta", (m) => {
         try{
           const el = document.getElementById("worldMeta");
@@ -558,9 +559,23 @@ let mySid = null;
           const icon = (m.icon||"").trim();
           const name = (m.name||m.room||"").trim();
           const desc = (m.description||"").trim();
-          el.textContent = `${icon?icon+" ":""}${name}${desc?(" — "+desc):""}`;
+          currentMeta = `${icon?icon+" ":""}${name}${desc?(" — "+desc):""}`;
+          el.textContent = currentMeta;
         }catch(e){}
       });
+
+
+      let currentWorldRoles = null;
+      socket.on("world_roles", (r) => {
+        try{
+          currentWorldRoles = r || null;
+          const el = document.getElementById("worldMeta");
+          if(!el || !currentMeta) return;
+          const owner = (r && r.owner) ? (" • Owner: @" + r.owner) : "";
+          el.textContent = `${currentMeta}` + owner;
+        }catch(e){}
+      });
+
 socket.on("joined_room", (p) => {
         try{
           const r = (p && p.room) || "#lobby";

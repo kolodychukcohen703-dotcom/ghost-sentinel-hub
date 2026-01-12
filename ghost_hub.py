@@ -141,6 +141,74 @@ def _format_world_label(room: str):
     desc = (m.get("description") or "").strip()
     label = (icon + " " if icon else "") + name
     return label, desc
+
+
+# --- World Roles (Phase 3) ---
+def _db_init_world_roles():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS world_roles (
+            room TEXT PRIMARY KEY,
+            owner TEXT,
+            helpers TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _get_world_roles(room: str):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT owner, helpers FROM world_roles WHERE room=?", (room,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        owner = (row[0] or "").strip()
+        helpers = (row[1] or "").strip()
+        helper_list = [h.strip() for h in helpers.split(",") if h.strip()]
+        return {"room": room, "owner": owner, "helpers": helper_list}
+    return {"room": room, "owner": "", "helpers": []}
+
+def _set_world_roles(room: str, owner: str, helpers_list):
+    helpers_csv = ",".join([h.strip() for h in (helpers_list or []) if h and h.strip()])
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO world_roles (room, owner, helpers, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(room) DO UPDATE SET
+            owner=excluded.owner,
+            helpers=excluded.helpers,
+            updated_at=excluded.updated_at
+    """, (room, owner, helpers_csv, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def _is_world_owner(room: str, user: str):
+    r = _get_world_roles(room)
+    return r.get("owner","").lower() == (user or "").strip().lower()
+
+def _is_world_helper(room: str, user: str):
+    r = _get_world_roles(room)
+    u = (user or "").strip().lower()
+    return u and any(h.lower()==u for h in r.get("helpers", []))
+
+def _can_manage_world(room: str, user: str):
+    return _is_world_owner(room, user) or _is_world_helper(room, user)
+
+def _ensure_world_roles_seeded(room: str):
+    # Seed roles row if missing; owner empty by default
+    r = _get_world_roles(room)
+    if r.get("owner","") == "" and r.get("helpers") == []:
+        # do not overwrite if row exists with data; only ensure a row exists
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("INSERT OR IGNORE INTO world_roles (room, owner, helpers, updated_at) VALUES (?,?,?,?)",
+                    (room, "", "", datetime.utcnow().isoformat()))
+        conn.commit()
+        conn.close()
 def _load_world_state(room: str):
     """Load a room's world state from SQLite into memory (idempotent)."""
     room = (room or MAIN_ROOM).strip()
@@ -1638,6 +1706,8 @@ def on_send_message(data):
             _world_state_by_room[target] = st
             emit("world_state", st, to=sid)
             emit("world_meta", _get_world_meta(target), to=sid)
+            _ensure_world_roles_seeded(target)
+            emit("world_roles", _get_world_roles(target), to=sid)
         except Exception:
             pass
 
@@ -1702,6 +1772,66 @@ def on_send_message(data):
                 if room in rooms2:
                     names.append(u.get("name", "guest"))
         emit("chat_message", {"room": room, "sender": "hub", "msg": "Here now: " + (", ".join(sorted(set(names))) if names else "—"), "ts": utc_ts()}, to=sid)
+        return
+
+    # !world claim / owners / helpers (Phase 3)
+    if msg in ("!world claim", "!claim"):
+        _ensure_world_roles_seeded(room)
+        roles = _get_world_roles(room)
+        if roles.get("owner"):
+            emit("chat_message", {"room": room, "sender": "hub", "msg": f"Owner already set: @{roles['owner']}.", "ts": utc_ts()}, to=sid)
+            return
+        _set_world_roles(room, user, [])
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"@{user} claimed {room} as owner.", "ts": utc_ts()}, to=room)
+        emit("world_roles", _get_world_roles(room), to=sid)
+        return
+
+    if msg in ("!world owners", "!world owner", "!owners"):
+        roles = _get_world_roles(room)
+        owner = roles.get("owner") or "—"
+        helpers = roles.get("helpers") or []
+        hs = (", ".join("@" + h for h in helpers) if helpers else "—")
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Owner: @{owner} | Helpers: {hs}", "ts": utc_ts()}, to=sid)
+        return
+
+    if msg.startswith("!world addhelper ") or msg.startswith("!addhelper "):
+        target = msg.split(" ", 2)[2].strip() if msg.startswith("!world addhelper ") else msg.split(" ", 1)[1].strip()
+        target = target.lstrip("@").strip()
+        if not target:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !world addhelper @name", "ts": utc_ts()}, to=sid)
+            return
+        roles = _get_world_roles(room)
+        if roles.get("owner") == "":
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "No owner set yet. Use !world claim first.", "ts": utc_ts()}, to=sid)
+            return
+        if not _is_world_owner(room, user):
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Only the world owner can add helpers (Phase 3).", "ts": utc_ts()}, to=sid)
+            return
+        helpers = roles.get("helpers") or []
+        if target.lower() not in [h.lower() for h in helpers]:
+            helpers.append(target)
+        _set_world_roles(room, roles.get("owner"), helpers)
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Added helper @{target}.", "ts": utc_ts()}, to=room)
+        emit("world_roles", _get_world_roles(room), to=sid)
+        return
+
+    if msg.startswith("!world delhelper ") or msg.startswith("!delhelper "):
+        target = msg.split(" ", 2)[2].strip() if msg.startswith("!world delhelper ") else msg.split(" ", 1)[1].strip()
+        target = target.lstrip("@").strip()
+        if not target:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !world delhelper @name", "ts": utc_ts()}, to=sid)
+            return
+        roles = _get_world_roles(room)
+        if roles.get("owner") == "":
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "No owner set yet.", "ts": utc_ts()}, to=sid)
+            return
+        if not _is_world_owner(room, user):
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Only the world owner can remove helpers (Phase 3).", "ts": utc_ts()}, to=sid)
+            return
+        helpers = [h for h in (roles.get("helpers") or []) if h.lower() != target.lower()]
+        _set_world_roles(room, roles.get("owner"), helpers)
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Removed helper @{target}.", "ts": utc_ts()}, to=room)
+        emit("world_roles", _get_world_roles(room), to=sid)
         return
 
     # !world info / !world list (Phase 2)
