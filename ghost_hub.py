@@ -70,11 +70,29 @@ _world_state_by_room = defaultdict(_default_world_state)
 
 # --- Phase 1 Persistence (SQLite) ---
 DB_PATH = os.environ.get("GHOST_HUB_DB", os.path.join(os.path.dirname(__file__), "worlds.db"))
+
+def _normalize_db_path(p: str) -> str:
+    try:
+        import os
+        # If Render disk is mounted at a path that is a directory (common when user sets /var/data/worlds.db),
+        # store the sqlite file inside it.
+        if os.path.isdir(p):
+            return os.path.join(p, "worlds.db")
+    except Exception:
+        pass
+    return p
+
+# Normalize DB_PATH in case the disk mount path is a directory
+try:
+    DB_PATH = _normalize_db_path(DB_PATH)
+except Exception:
+    pass
+
 _db_lock = Lock()
 
 def _db_init():
     with _db_lock:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         try:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS world_states (room TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_utc TEXT NOT NULL)"
@@ -87,7 +105,7 @@ def _db_init():
 
 # --- World Metadata (Phase 2) ---
 def _db_init_world_meta():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS world_meta (
@@ -102,7 +120,7 @@ def _db_init_world_meta():
     conn.close()
 
 def _seed_world_meta_if_empty():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM world_meta")
     row = cur.fetchone()
@@ -125,7 +143,7 @@ def _seed_world_meta_if_empty():
     conn.close()
 
 def _get_world_meta(room: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("SELECT name, description, icon FROM world_meta WHERE room=?", (room,))
     row = cur.fetchone()
@@ -288,7 +306,7 @@ Notes
 
 
 def _db_init_room_logs():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS room_logs (
@@ -306,7 +324,7 @@ def _db_init_room_logs():
 def _log_room_message(room: str, sender: str, msg: str, ts: str):
     try:
         _db_init_room_logs()
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         cur = conn.cursor()
         cur.execute("INSERT INTO room_logs(room, ts, sender, msg) VALUES (?,?,?,?)", (room, ts, sender, msg))
         # prune old logs for that room
@@ -327,7 +345,7 @@ def _log_room_message(room: str, sender: str, msg: str, ts: str):
 def _get_room_history(room: str, limit: int = ROOM_HISTORY_ON_JOIN):
     try:
         _db_init_room_logs()
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         cur = conn.cursor()
         cur.execute("SELECT ts, sender, msg FROM room_logs WHERE room=? ORDER BY id DESC LIMIT ?", (room, int(limit)))
         rows = cur.fetchall()
@@ -347,7 +365,7 @@ def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
 ASTRO_SCENE_CHOICES = ["A", "B", "C"]
 
 def _db_init_astro():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS astro_profiles (
@@ -373,7 +391,7 @@ def _db_init_astro():
 
 def _astro_get_profile(user: str):
     _db_init_astro()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("SELECT dob, tob, tz FROM astro_profiles WHERE user=?", (user,))
     row = cur.fetchone()
@@ -388,7 +406,7 @@ def _astro_set_profile(user: str, dob=None, tob=None, tz=None):
     if dob is not None: p["dob"] = dob
     if tob is not None: p["tob"] = tob
     if tz is not None: p["tz"] = tz
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO astro_profiles(user, dob, tob, tz, updated_at)
@@ -405,7 +423,7 @@ def _astro_set_profile(user: str, dob=None, tob=None, tz=None):
 
 def _astro_get_session(user: str, room: str):
     _db_init_astro()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("SELECT scene_id, state_json FROM astro_sessions WHERE user=? AND room=?", (user, room))
     row = cur.fetchone()
@@ -421,7 +439,7 @@ def _astro_get_session(user: str, room: str):
 
 def _astro_set_session(user: str, room: str, scene_id: str, state: dict):
     _db_init_astro()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO astro_sessions(user, room, scene_id, state_json, updated_at)
@@ -529,7 +547,7 @@ def _astro_advance(scene_id: str, choice: str):
     }
 # --- World Roles (Phase 3) ---
 def _db_init_world_roles():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS world_roles (
@@ -544,7 +562,7 @@ def _db_init_world_roles():
 
 def _get_world_roles(room: str):
     _db_init_world_roles()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("SELECT owner, helpers FROM world_roles WHERE room=?", (room,))
     row = cur.fetchone()
@@ -559,7 +577,7 @@ def _get_world_roles(room: str):
 def _set_world_roles(room: str, owner: str, helpers_list):
     _db_init_world_roles()
     helpers_csv = ",".join([h.strip() for h in (helpers_list or []) if h and h.strip()])
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO world_roles (room, owner, helpers, updated_at)
@@ -590,7 +608,7 @@ def _ensure_world_roles_seeded(room: str):
     r = _get_world_roles(room)
     if r.get("owner","") == "" and r.get("helpers") == []:
         # do not overwrite if row exists with data; only ensure a row exists
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         cur = conn.cursor()
         cur.execute("INSERT OR IGNORE INTO world_roles (room, owner, helpers, updated_at) VALUES (?,?,?,?)",
                     (room, "", "", datetime.utcnow().isoformat()))
@@ -603,7 +621,7 @@ def _load_world_state(room: str):
         room = "#" + room
     _ = _world_state_by_room[room]  # ensure default exists
     with _db_lock:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         try:
             cur = conn.execute("SELECT state_json FROM world_states WHERE room = ?", (room,))
             row = cur.fetchone()
@@ -630,7 +648,7 @@ def _save_world_state(room: str):
     payload = json.dumps(st, ensure_ascii=False)
     ts = utc_ts()
     with _db_lock:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
         try:
             conn.execute(
                 "INSERT INTO world_states(room, state_json, updated_utc) VALUES(?,?,?) "
