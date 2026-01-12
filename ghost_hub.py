@@ -218,6 +218,35 @@ def _save_world_state(room: str, state: dict):
             save_world_state(room, state)  # legacy fallback
         except Exception:
             pass
+
+
+# --- World Export (Phase 5) ---
+def _world_stats(room: str):
+    st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+    homes = _all_homes_in_world(room)
+    msgs = st.get("messages") or []
+    roles = _get_world_roles(room)
+    return {
+        "room": room,
+        "homes_count": len(homes),
+        "messages_count": len(msgs) if isinstance(msgs, list) else 0,
+        "owner": roles.get("owner",""),
+        "helpers": roles.get("helpers", []),
+        "exported_at": datetime.utcnow().isoformat()
+    }
+
+def _export_world(room: str):
+    st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+    meta = _get_world_meta(room)
+    roles = _get_world_roles(room)
+    payload = {
+        "room": room,
+        "meta": meta,
+        "roles": roles,
+        "state": st,
+        "stats": _world_stats(room),
+    }
+    return payload
 # --- World Roles (Phase 3) ---
 def _db_init_world_roles():
     conn = sqlite3.connect(DB_PATH)
@@ -1974,6 +2003,25 @@ def on_send_message(data):
         st["homes"] = homes
         _save_world_state(room, st)
         emit("chat_message", {"room": room, "sender": "hub", "msg": f"Removed home {home_id}.", "ts": utc_ts()}, to=room)
+        return
+
+
+    # !world stats / !world export (Phase 5)
+    if msg in ("!world stats", "!stats"):
+        s = _world_stats(room)
+        label, _ = _format_world_label(room)
+        owner = s.get("owner") or "—"
+        emit("chat_message", {"room": room, "sender": "hub",
+                              "msg": f"{label} | homes:{s['homes_count']} | msgs:{s['messages_count']} | owner:@{owner}",
+                              "ts": utc_ts()}, to=sid)
+        return
+
+    if msg in ("!world export", "!export"):
+        payload = _export_world(room)
+        txt = json.dumps(payload, ensure_ascii=False, indent=2)
+        if len(txt) > 4000:
+            txt = txt[:4000] + "\n... (truncated)"
+        emit("chat_message", {"room": room, "sender": "hub", "msg": "WORLD_EXPORT_JSON\n" + txt, "ts": utc_ts()}, to=sid)
         return
 
     # /worlds (aka nodes): list active rooms with counts
