@@ -357,7 +357,7 @@ def _get_room_history(room: str, limit: int = ROOM_HISTORY_ON_JOIN):
 
 def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
     ts = ts or utc_ts()
-    _log_room_message(room, user, msg, ts)
+    _log_room_message(room, sender, msg, ts)
     emit("chat_message", {"room": room, "sender": sender, "msg": msg, "ts": ts}, to=to_target)
 
 
