@@ -23,6 +23,7 @@ from flask_socketio import SocketIO, join_room, leave_room, emit
 from datetime import datetime
 import json
 import os
+import sqlite3
 from threading import Lock
 from collections import defaultdict, deque
 import shlex
@@ -65,6 +66,69 @@ def _default_world_state():
     }
 
 _world_state_by_room = defaultdict(_default_world_state)
+
+
+# --- Phase 1 Persistence (SQLite) ---
+DB_PATH = os.environ.get("GHOST_HUB_DB", os.path.join(os.path.dirname(__file__), "worlds.db"))
+_db_lock = Lock()
+
+def _db_init():
+    with _db_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS world_states (room TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_utc TEXT NOT NULL)"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+def _load_world_state(room: str):
+    """Load a room's world state from SQLite into memory (idempotent)."""
+    room = (room or MAIN_ROOM).strip()
+    if not room.startswith("#"):
+        room = "#" + room
+    _ = _world_state_by_room[room]  # ensure default exists
+    with _db_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            cur = conn.execute("SELECT state_json FROM world_states WHERE room = ?", (room,))
+            row = cur.fetchone()
+            if not row:
+                return
+            data = json.loads(row[0] or "{}")
+        except Exception:
+            return
+        finally:
+            conn.close()
+
+    # Merge into default (keep unknown keys too)
+    if isinstance(data, dict):
+        st = _world_state_by_room[room]
+        for k, v in data.items():
+            st[k] = v
+
+def _save_world_state(room: str):
+    """Persist a room's world state to SQLite."""
+    room = (room or MAIN_ROOM).strip()
+    if not room.startswith("#"):
+        room = "#" + room
+    st = _world_state_by_room[room]
+    payload = json.dumps(st, ensure_ascii=False)
+    ts = utc_ts()
+    with _db_lock:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.execute(
+                "INSERT INTO world_states(room, state_json, updated_utc) VALUES(?,?,?) "
+                "ON CONFLICT(room) DO UPDATE SET state_json=excluded.state_json, updated_utc=excluded.updated_utc",
+                (room, payload, ts),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+_db_init()
 
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
 
@@ -1370,6 +1434,8 @@ def on_join(data):
         _room_members[r].add(sid)
         # ensure history bucket exists
         _ = _room_history[r]
+
+        _load_world_state(r)
 
     with _presence_lock:
         _online[sid] = {
