@@ -220,6 +220,13 @@
       color: #9ca3af;
       line-height: 1.35;
     }
+  
+    .roomStrip{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px 0}
+    .roomTab{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid #1f2937;background:rgba(2,6,23,0.55);cursor:pointer;font-size:0.78rem;color:#e5e7eb}
+    .roomTab.active{border-color:#22c55e77;box-shadow:0 0 0 2px rgba(34,197,94,0.14) inset}
+    .roomX{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);font-size:0.8rem;opacity:0.9}
+    .roomX:hover{border-color:#ef444477}
+
   </style>
 </head>
 <body>
@@ -382,7 +389,94 @@
     let socket = null;
     let joined = false;
     let mainRoom = "{{ main_room }}";
-    let mySid = null;
+    
+
+    // Multi-room support (v4.5+)
+    let joinedRooms = new Set([mainRoom]);
+
+    
+
+    function renderRoomStrip(){
+      const el = document.getElementById("roomStrip");
+      if(!el) return;
+      el.innerHTML = "";
+      const rooms = Array.from(joinedRooms);
+      rooms.sort((a,b)=> (a===mainRoom?-1:0) - (b===mainRoom?-1:0) || a.localeCompare(b));
+      rooms.forEach(r=>{
+        const tab = document.createElement("div");
+        tab.className = "roomTab" + (r===mainRoom ? " active" : "");
+        const label = document.createElement("span");
+        label.textContent = r;
+        tab.appendChild(label);
+
+        if(r !== "#lobby"){
+          const x = document.createElement("span");
+          x.className = "roomX";
+          x.textContent = "×";
+          x.title = "Leave";
+          x.addEventListener("click", (ev)=>{
+            ev.stopPropagation();
+            partRoomClient(r);
+            renderRoomStrip();
+          });
+          tab.appendChild(x);
+        }
+        tab.addEventListener("click", ()=>{
+          setActiveRoom(r);
+          renderRoomStrip();
+        });
+        el.appendChild(tab);
+      });
+    }
+
+    renderRoomStrip();
+function setActiveRoom(r){
+      if(!r) return;
+      mainRoom = r;
+      roomLabel.textContent = mainRoom;
+      renderRoomStrip();
+      renderRoomStrip();
+      if(socket){
+        socket.emit("join", { user: (document.getElementById("userName").value||"guest"), rooms: Array.from(joinedRooms), active: mainRoom });
+      }
+    }
+
+    function joinRoomClient(r){
+      if(!r) return;
+      r = String(r).trim();
+      if(!r) return;
+      if(!r.startsWith("#")) r = "#"+r;
+      joinedRooms.add(r);
+      renderRoomStrip();
+      mainRoom = r;
+      roomLabel.textContent = mainRoom;
+      renderRoomStrip();
+      if(socket){
+        socket.emit("join", { user: (document.getElementById("userName").value||"guest"), rooms: Array.from(joinedRooms), active: mainRoom });
+      }
+      appendLobbyMsg({room: mainRoom, sender:"hub", ts: new Date().toISOString(), msg:`Joined ${r}. (Now in ${Array.from(joinedRooms).join(", ")})`});
+    }
+
+    function partRoomClient(r){
+      if(!r) return;
+      r = String(r).trim();
+      if(!r) return;
+      if(!r.startsWith("#")) r = "#"+r;
+      if(r === "#lobby") return;
+      joinedRooms.delete(r);
+      renderRoomStrip();
+      if(socket){
+        socket.emit("leave", { room: r });
+      }
+      if(mainRoom === r){
+        mainRoom = "#lobby";
+        roomLabel.textContent = mainRoom;
+        renderRoomStrip();
+      }
+      appendLobbyMsg({room: mainRoom, sender:"hub", ts: new Date().toISOString(), msg:`Left ${r}. (Now in ${Array.from(joinedRooms).join(", ")})`});
+    }
+
+let mySid = null;
 
     // Restore last used name
     if (lastUserName) {
@@ -397,6 +491,8 @@
     const peers = {};
 
     function appendLobbyMsg(m) {
+      // Only display messages from rooms we are in
+      if (m && m.room && !joinedRooms.has(m.room)) return;
       const div = document.createElement("div");
       div.className = "msg";
       const meta = document.createElement("div");

@@ -51,6 +51,12 @@ MAIN_ROOM = "#lobby"
 ROOM_HISTORY_MAX = 250
 _room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
 
+
+# Track members per room (for /list and multi-channel join)
+_room_members = defaultdict(set)   # room -> set(sid)
+
+def _room_counts():
+    return {r: len(sids) for r, sids in _room_members.items() if len(sids) > 0}
 # Presence: sid -> {"sid":..., "name":..., "room":..., "last_seen":...}
 _online: Dict[str, Dict[str, Any]] = {}
 
@@ -1278,42 +1284,142 @@ def on_disconnect():
     sid = request.sid
     with _presence_lock:
         _online.pop(sid, None)
+    # Remove from room membership tracker
+    for r in list(_room_members.keys()):
+        _room_members[r].discard(sid)
+        if len(_room_members[r]) == 0 and r != MAIN_ROOM:
+            try:
+                del _room_members[r]
+            except Exception:
+                pass
+
     _emit_user_list()
 
 
 @socketio.on("join")
 def on_join(data):
-    # Ignore requested room; always lobby
     sid = request.sid
     user = (data or {}).get("user") or "guest"
     user = (user or "guest").strip()[:48] or "guest"
 
-    join_room(MAIN_ROOM)
+    rooms = (data or {}).get("rooms") or []
+    active = (data or {}).get("active") or (data or {}).get("room") or MAIN_ROOM
+
+    # Always include lobby
+    if MAIN_ROOM not in rooms:
+        rooms = [MAIN_ROOM] + list(rooms)
+
+    # Normalize + join rooms
+    norm_rooms = []
+    for r in rooms:
+        r = (r or "").strip()
+        if not r:
+            continue
+        if not r.startswith("#"):
+            r = "#" + r
+        norm_rooms.append(r)
+
+    if not active or not str(active).strip():
+        active = MAIN_ROOM
+    active = str(active).strip()
+    if not active.startswith("#"):
+        active = "#" + active
+
+    for r in norm_rooms:
+        join_room(r)
+        _room_members[r].add(sid)
+        # ensure history bucket exists
+        _ = _room_history[r]
 
     with _presence_lock:
-        if sid in _online:
-            _online[sid]["name"] = user
-            _online[sid]["room"] = MAIN_ROOM
-            _online[sid]["last_seen"] = utc_ts()
+        _online[sid] = {
+            "name": user,
+            "room": active,              # active room (UI focus)
+            "rooms": list(dict.fromkeys(norm_rooms))[:32],
+            "last_seen": utc_ts(),
+        }
 
-    emit("chat_history", list(_room_history[MAIN_ROOM]))
+    # Send history for active room only (client can still receive broadcast from all joined rooms)
+    emit("chat_history", {"room": active, "items": list(_room_history[active])})
+
     _emit_user_list()
 
-    notice = {"room": MAIN_ROOM, "sender": "hub", "msg": f"{user} entered {MAIN_ROOM}", "ts": utc_ts()}
-    _room_history[MAIN_ROOM].append(notice)
-    emit("chat_message", notice, to=MAIN_ROOM)
+    notice = {"room": active, "sender": "hub", "msg": f"{user} joined {active}", "ts": utc_ts()}
+    _room_history[active].append(notice)
+    emit("chat_message", notice, to=active)
 
-    hint = {"room": MAIN_ROOM, "sender": BOT_NAME, "msg": "Type !help for builder commands. DMs: click a user on the right.", "ts": utc_ts()}
+    # Hint only once per session (to lobby)
+    hint = {"room": MAIN_ROOM, "sender": BOT_NAME, "msg": "Try: /list, /join #witness-hall, /join #terminal, /part #room. You can stay in multiple rooms.", "ts": utc_ts()}
     _room_history[MAIN_ROOM].append(hint)
     emit("chat_message", hint, to=MAIN_ROOM)
 
 
+@socketio.on("leave")
+def on_leave(data):
+    sid = request.sid
+    room = (data or {}).get("room") or ""
+    room = str(room).strip()
+    if not room:
+        return
+    if not room.startswith("#"):
+        room = "#" + room
+
+    # Never leave lobby
+    if room == MAIN_ROOM:
+        return
+
+    leave_room(room)
+    try:
+        _room_members[room].discard(sid)
+    except Exception:
+        pass
+
+    with _presence_lock:
+        if sid in _online:
+            rooms = _online[sid].get("rooms") or []
+            rooms = [r for r in rooms if r != room]
+            _online[sid]["rooms"] = rooms
+            # If active room was left, focus back to lobby
+            if _online[sid].get("room") == room:
+                _online[sid]["room"] = MAIN_ROOM
+
+    _emit_user_list()
+
+
+
+@socketio.on("list_rooms")
+def on_list_rooms(_data=None):
+    # "Running" rooms are those with at least one member; always include lobby
+    counts = _room_counts()
+    counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
+    rooms = [{"room": r, "count": c} for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+    emit("rooms_list", {"rooms": rooms})
+
+
 @socketio.on("send_message")
 def on_send_message(data):
-    room = MAIN_ROOM
+    sid = request.sid
     user = (data or {}).get("user") or "guest"
     msg = ((data or {}).get("msg") or "").strip()
+    room = (data or {}).get("room")
+
+    if not room:
+        with _presence_lock:
+            room = (_online.get(sid) or {}).get("room") or MAIN_ROOM
+
+    room = str(room).strip() or MAIN_ROOM
+    if not room.startswith("#"):
+        room = "#" + room
+
     if not msg:
+        return
+
+    # Server-side /list convenience
+    if msg in ("/list", "!list"):
+        counts = _room_counts()
+        counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
+        for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+            emit("chat_message", {"room": room, "sender": "hub", "msg": f"{r}  ({c} online)", "ts": utc_ts()}, to=sid)
         return
 
     payload = {"room": room, "sender": user, "msg": msg, "ts": utc_ts()}
@@ -1321,7 +1427,6 @@ def on_send_message(data):
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, user, msg)
-
 
 @socketio.on("dm_open")
 def on_dm_open(data):
