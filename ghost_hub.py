@@ -1,3 +1,55 @@
+
+
+# --- Home Create Flags (Phase 6) ---
+def _parse_home_create_args(raw: str):
+    """Parse: !home create "desc" --style X --size Y --mood 🙂
+    Desc may be in quotes or unquoted text until first flag.
+    """
+    raw = (raw or "").strip()
+    desc = ""
+    style = ""
+    size = ""
+    mood = ""
+    # extract quoted description first
+    m = re.search(r'"([^"]{1,500})"', raw)
+    if m:
+        desc = m.group(1).strip()
+        rest = (raw[:m.start()] + raw[m.end():]).strip()
+    else:
+        rest = raw
+    # parse flags
+    # --style, --size, --mood
+    def grab(flag):
+        mm = re.search(r'(?:^|\s)'+re.escape(flag)+r'\s+([^\s].*?)(?=\s+--\w+\b|$)', rest)
+        return mm.group(1).strip() if mm else ""
+    style = grab("--style")
+    size = grab("--size")
+    mood = grab("--mood")
+    # if no quoted desc, desc is text before first flag
+    if not desc:
+        # split on first flag
+        parts = re.split(r'\s+--\w+\b', rest, maxsplit=1)
+        desc = parts[0].strip()
+    # normalize mood to short token
+    mood = mood.strip()
+    if len(mood) > 8:
+        mood = mood[:8]
+    return {"desc": desc, "style": style, "size": size, "mood": mood}
+
+def _home_display(home: dict):
+    # pretty single-line
+    hid = home.get("id","?")
+    mood = home.get("mood","")
+    style = home.get("style","")
+    size = home.get("size","")
+    desc = home.get("desc","")
+    parts = []
+    if mood: parts.append(mood)
+    parts.append(f"#{hid}")
+    if style: parts.append(f"style:{style}")
+    if size: parts.append(f"size:{size}")
+    if desc: parts.append(desc)
+    return " • ".join(parts)
 #!/usr/bin/env python3
 """
 Ghost Sentinel Hub — Lobby + Presence + DMs + Sealed Rune Cipher (v4)
@@ -22,6 +74,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from datetime import datetime
 import json
+import re
 import os
 import sqlite3
 from threading import Lock
