@@ -143,6 +143,81 @@ def _format_world_label(room: str):
     return label, desc
 
 
+
+
+# --- Home Permissions (Phase 4) ---
+def _now_iso():
+    return datetime.utcnow().isoformat()
+
+def _normalize_homes_state(state: dict):
+    """Ensure homes are a dict[str, list[dict]] with per-home metadata."""
+    if not isinstance(state, dict):
+        state = {}
+    homes = state.get("homes")
+    if not isinstance(homes, dict):
+        homes = {}
+    for owner, lst in list(homes.items()):
+        if not isinstance(lst, list):
+            homes[owner] = []
+            continue
+        new_lst = []
+        for h in lst:
+            if isinstance(h, str):
+                new_lst.append({"id": f"h{abs(hash((owner,h)))%10**9}", "name": h, "created_by": owner, "created_at": _now_iso()})
+            elif isinstance(h, dict):
+                if "id" not in h:
+                    base = h.get("name") or h.get("title") or "home"
+                    h["id"] = f"h{abs(hash((owner,base,h.get('created_at',''))))%10**9}"
+                if "created_by" not in h:
+                    h["created_by"] = owner
+                if "created_at" not in h:
+                    h["created_at"] = _now_iso()
+                if "name" not in h and "title" in h:
+                    h["name"] = h["title"]
+                new_lst.append(h)
+        homes[owner] = new_lst
+    state["homes"] = homes
+    return state
+
+def _all_homes_in_world(room: str):
+    st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+    homes = _normalize_homes_state(st).get("homes") or {}
+    out = []
+    for _, lst in homes.items():
+        for h in lst:
+            out.append(h)
+    return out
+
+def _find_home(room: str, home_id: str):
+    st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+    homes = _normalize_homes_state(st).get("homes") or {}
+    for owner, lst in homes.items():
+        for i, h in enumerate(lst):
+            if str(h.get("id","")) == str(home_id):
+                return owner, i, h, st
+    return None, None, None, st
+
+def _can_delete_home(room: str, user: str, home: dict):
+    if not home:
+        return False
+    u = (user or "").strip().lower()
+    if u and (home.get("created_by","").strip().lower() == u):
+        return True
+    return _can_manage_world(room, user)
+
+def _save_world_state_to_db(room: str, state: dict):
+    return _save_world_state(room, state)
+
+def _save_world_state(room: str, state: dict):
+    state = _normalize_homes_state(state or {})
+    _world_state_by_room[room] = state
+    try:
+        _save_world_state_to_db(room, state)
+    except Exception:
+        try:
+            save_world_state(room, state)  # legacy fallback
+        except Exception:
+            pass
 # --- World Roles (Phase 3) ---
 def _db_init_world_roles():
     conn = sqlite3.connect(DB_PATH)
@@ -1641,7 +1716,7 @@ def on_list_rooms(_data=None):
     rooms = []
     for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
         st = _world_state_by_room[r]
-        homes = st.get("homes") or {}
+        homes = _normalize_homes_state(st).get("homes") or {}
         homes_count = sum(len(v) for v in homes.values()) if isinstance(homes, dict) else 0
         rooms.append({"room": r, "count": c, "homes": homes_count})
 
@@ -1849,6 +1924,56 @@ def on_send_message(data):
         for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
             label, desc = _format_world_label(r)
             emit("chat_message", {"room": room, "sender": "hub", "msg": f"{label} — {desc}", "ts": utc_ts()}, to=sid)
+        return
+
+
+    # !home mine / !home list / !home remove <id> (Phase 4)
+    if msg in ("!home mine", "!homes mine"):
+        st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+        homes = st.get("homes") or {}
+        mine = []
+        u = (user or "").strip()
+        for _, lst in homes.items():
+            for h in lst:
+                if (h.get("created_by") or "") == u:
+                    mine.append(h)
+        if not mine:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "You have no homes here yet.", "ts": utc_ts()}, to=sid)
+            return
+        lines = [f"{h.get('id')} — {h.get('name','home')}" for h in mine[:25]]
+        emit("chat_message", {"room": room, "sender": "hub", "msg": "Your homes: " + " | ".join(lines), "ts": utc_ts()}, to=sid)
+        return
+
+    if msg in ("!home list", "!homes", "!home all"):
+        allh = _all_homes_in_world(room)
+        if not allh:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "No homes built in this world yet.", "ts": utc_ts()}, to=sid)
+            return
+        lines = [f"{h.get('id')} — {h.get('name','home')} (@{h.get('created_by','?')})" for h in allh[:30]]
+        emit("chat_message", {"room": room, "sender": "hub", "msg": "Homes: " + " | ".join(lines), "ts": utc_ts()}, to=sid)
+        return
+
+    if msg.startswith("!home remove ") or msg.startswith("!home rm "):
+        parts = msg.split()
+        home_id = parts[2].strip() if len(parts) >= 3 else ""
+        if not home_id:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "Usage: !home remove <id>", "ts": utc_ts()}, to=sid)
+            return
+        owner, idx, h, st = _find_home(room, home_id)
+        if not h:
+            emit("chat_message", {"room": room, "sender": "hub", "msg": f"No home found with id {home_id}.", "ts": utc_ts()}, to=sid)
+            return
+        if not _can_delete_home(room, user, h):
+            emit("chat_message", {"room": room, "sender": "hub", "msg": "You don't have permission to remove that home.", "ts": utc_ts()}, to=sid)
+            return
+        homes = st.get("homes") or {}
+        try:
+            homes[owner].pop(idx)
+        except Exception:
+            pass
+        st["homes"] = homes
+        _save_world_state(room, st)
+        emit("chat_message", {"room": room, "sender": "hub", "msg": f"Removed home {home_id}.", "ts": utc_ts()}, to=room)
         return
 
     # /worlds (aka nodes): list active rooms with counts
