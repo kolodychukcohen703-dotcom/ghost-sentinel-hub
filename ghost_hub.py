@@ -1583,6 +1583,9 @@ def on_send_message(data):
         # Send history for new room to joining sid
         emit("chat_history", {"room": target, "items": list(_room_history[target])}, to=sid)
 
+        # Tell client to switch focus / update joined set
+        emit("joined_room", {"room": target, "rooms": (_online.get(sid) or {}).get("rooms", [MAIN_ROOM])}, to=sid)
+
         _emit_user_list()
         _emit_room_user_list(target)
         _emit_room_user_list(MAIN_ROOM)
@@ -1625,6 +1628,7 @@ def on_send_message(data):
         _emit_room_user_list(target)
         _emit_room_user_list(MAIN_ROOM)
 
+        emit("joined_room", {"room": (_online.get(sid) or {}).get("room", MAIN_ROOM), "rooms": (_online.get(sid) or {}).get("rooms", [MAIN_ROOM])}, to=sid)
         emit("chat_message", {"room": room, "sender": "hub", "msg": f"Left {target}.", "ts": utc_ts()}, to=sid)
         return
 

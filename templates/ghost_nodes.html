@@ -548,7 +548,20 @@ let mySid = null;
         if (stored && (autoJoinWanted || joined || localStorage.getItem("ghosthub_autojoin") === "1")) {
           autoJoinWanted = true;
           socket.emit("join", { room: mainRoom, user: stored });
-          joined = true;
+          
+
+      socket.on("joined_room", (p) => {
+        try{
+          const r = (p && p.room) || "#lobby";
+          const rooms = (p && p.rooms) || [r];
+          joinedRooms = new Set(rooms);
+          setActiveRoom(r);
+          renderRoomStrip();
+          socket.emit("list_rooms", {});
+        }catch(e){}
+      });
+
+joined = true;
           roomLabel.textContent = mainRoom;
         }
 
