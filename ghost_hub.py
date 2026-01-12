@@ -159,6 +159,7 @@ def _db_init_world_roles():
     conn.close()
 
 def _get_world_roles(room: str):
+    _db_init_world_roles()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT owner, helpers FROM world_roles WHERE room=?", (room,))
@@ -172,6 +173,7 @@ def _get_world_roles(room: str):
     return {"room": room, "owner": "", "helpers": []}
 
 def _set_world_roles(room: str, owner: str, helpers_list):
+    _db_init_world_roles()
     helpers_csv = ",".join([h.strip() for h in (helpers_list or []) if h and h.strip()])
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -199,6 +201,7 @@ def _can_manage_world(room: str, user: str):
     return _is_world_owner(room, user) or _is_world_helper(room, user)
 
 def _ensure_world_roles_seeded(room: str):
+    _db_init_world_roles()
     # Seed roles row if missing; owner empty by default
     r = _get_world_roles(room)
     if r.get("owner","") == "" and r.get("helpers") == []:
