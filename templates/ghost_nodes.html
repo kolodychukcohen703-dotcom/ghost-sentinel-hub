@@ -237,7 +237,7 @@
 .kbdRow { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .kbdKey { padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(15,23,42,0.55); color:#e5e7eb; cursor:pointer; font-size:13px; }
 .kbdKey:hover { filter:brightness(1.1); }
-.kbdKey.wide { flex:1; }
+.kbdKey.wide { flex: 1 1 auto; min-width: 56px; }
 .kbdKey.primary { border-color:rgba(59,130,246,0.5); }
 .kbdKey.toggle { border-color:rgba(16,185,129,0.5); }
 
@@ -334,6 +334,7 @@
   <span class="subtitle">On‑screen keyboard</span>
 </div>
 
+
 <div id="kbdPanel">
   <div class="kbdRow">
     <button class="kbdKey primary" data-kbd="/list">/list</button>
@@ -341,33 +342,48 @@
     <button class="kbdKey primary" data-kbd="!help">!help</button>
   </div>
 
+  <!-- Laptop-style rows -->
   <div class="kbdRow">
-    <button class="kbdKey">Q</button><button class="kbdKey">W</button><button class="kbdKey">E</button>
-    <button class="kbdKey">R</button><button class="kbdKey">T</button><button class="kbdKey">Y</button>
-    <button class="kbdKey">U</button><button class="kbdKey">I</button><button class="kbdKey">O</button><button class="kbdKey">P</button>
-  </div>
-  <div class="kbdRow">
-    <button class="kbdKey">A</button><button class="kbdKey">S</button><button class="kbdKey">D</button>
-    <button class="kbdKey">F</button><button class="kbdKey">G</button><button class="kbdKey">H</button>
-    <button class="kbdKey">J</button><button class="kbdKey">K</button><button class="kbdKey">L</button>
-  </div>
-  <div class="kbdRow">
-    <button class="kbdKey">Z</button><button class="kbdKey">X</button><button class="kbdKey">C</button>
-    <button class="kbdKey">V</button><button class="kbdKey">B</button><button class="kbdKey">N</button><button class="kbdKey">M</button>
-  </div>
-
-  <div class="kbdRow">
-    <button class="kbdKey">/</button><button class="kbdKey">#</button><button class="kbdKey">!</button>
-    <button class="kbdKey">"</button><button class="kbdKey">@</button>
-    <button class="kbdKey">🙂</button><button class="kbdKey">🌌</button><button class="kbdKey">🗝️</button>
-  </div>
-
-  <div class="kbdRow">
-    <button class="kbdKey wide" data-act="space">Space</button>
+    <button class="kbdKey">`</button>
+    <button class="kbdKey">1</button><button class="kbdKey">2</button><button class="kbdKey">3</button><button class="kbdKey">4</button>
+    <button class="kbdKey">5</button><button class="kbdKey">6</button><button class="kbdKey">7</button><button class="kbdKey">8</button>
+    <button class="kbdKey">9</button><button class="kbdKey">0</button>
+    <button class="kbdKey">-</button><button class="kbdKey">=</button>
     <button class="kbdKey wide" data-act="back">⌫</button>
-    <button class="kbdKey wide primary" data-act="send">Send</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="tab">Tab</button>
+    <button class="kbdKey">Q</button><button class="kbdKey">W</button><button class="kbdKey">E</button><button class="kbdKey">R</button>
+    <button class="kbdKey">T</button><button class="kbdKey">Y</button><button class="kbdKey">U</button><button class="kbdKey">I</button>
+    <button class="kbdKey">O</button><button class="kbdKey">P</button>
+    <button class="kbdKey">[</button><button class="kbdKey">]</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="caps">Caps</button>
+    <button class="kbdKey">A</button><button class="kbdKey">S</button><button class="kbdKey">D</button><button class="kbdKey">F</button>
+    <button class="kbdKey">G</button><button class="kbdKey">H</button><button class="kbdKey">J</button><button class="kbdKey">K</button>
+    <button class="kbdKey">L</button>
+    <button class="kbdKey">;</button><button class="kbdKey">'</button>
+    <button class="kbdKey wide" data-act="enter">Enter</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="shift">Shift</button>
+    <button class="kbdKey">Z</button><button class="kbdKey">X</button><button class="kbdKey">C</button><button class="kbdKey">V</button>
+    <button class="kbdKey">B</button><button class="kbdKey">N</button><button class="kbdKey">M</button>
+    <button class="kbdKey">,</button><button class="kbdKey">.</button>
+    <button class="kbdKey wide" data-act="send">Send</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey">/</button><button class="kbdKey">#</button><button class="kbdKey">!</button><button class="kbdKey">"</button><button class="kbdKey">@</button>
+    <button class="kbdKey">🙂</button><button class="kbdKey">🌌</button><button class="kbdKey">🗝️</button>
+    <button class="kbdKey wide" data-act="space">Space</button>
   </div>
 </div>
+
 
         </div>
       </div>
@@ -1069,6 +1085,8 @@ async function encryptSealed(aesKey, ivU8, plaintext) {
     }
   
 // Touch keyboard logic
+let kbdCaps = false;
+let kbdShift = false;
 const kbdToggle = document.getElementById("kbdToggle");
 const kbdPanel = document.getElementById("kbdPanel");
 function kbdTarget(){return document.getElementById("chatMsg");}
@@ -1087,13 +1105,39 @@ function kbdBack(){const el=kbdTarget(); if(!el) return;
 if(kbdToggle&&kbdPanel){
   kbdToggle.onclick=()=>kbdPanel.classList.toggle("show");
   kbdPanel.onclick=(ev)=>{
-    const t=ev.target;
-    if(t.dataset.kbd) kbdInsert(t.dataset.kbd);
-    else if(t.innerText && t.innerText.length===1) kbdInsert(t.innerText);
-    else if(t.dataset.act==="space") kbdInsert(" ");
-    else if(t.dataset.act==="back") kbdBack();
-    else if(t.dataset.act==="send") document.getElementById("sendBtn")?.click();
-  };
+  const t=ev.target;
+  if(!(t instanceof HTMLElement)) return;
+
+  const act = t.dataset.act || "";
+  const dk = t.dataset.kbd;
+
+  if (act === "space") { kbdInsert(" "); return; }
+  if (act === "back") { kbdBack(); return; }
+  if (act === "send") { document.getElementById("sendBtn")?.click(); return; }
+  if (act === "enter") { document.getElementById("sendBtn")?.click(); return; }
+  if (act === "tab") { kbdInsert("  "); return; } // 2 spaces feels good in chat
+  if (act === "caps") { kbdCaps = !kbdCaps; kbdShift = false; return; }
+  if (act === "shift") { kbdShift = !kbdShift; return; }
+
+  if (dk) { kbdInsert(dk); return; }
+
+  const key = (t.innerText || "").trim();
+  if (!key) return;
+
+  // If it's a single character key, handle caps/shift for letters
+  if (key.length === 1) {
+    let out = key;
+    if (/^[a-zA-Z]$/.test(out)) {
+      const upper = kbdShift || kbdCaps;
+      out = upper ? out.toUpperCase() : out.toLowerCase();
+      if (kbdShift) kbdShift = false; // one-shot shift
+    }
+    kbdInsert(out);
+    return;
+  }
+
+  // Fallback (e.g. labels)
+};
 }
 
 </script>
