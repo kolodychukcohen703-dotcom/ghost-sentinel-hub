@@ -1,4 +1,118 @@
 
+
+
+# --- Unified Home System (Phase 7) ---
+def _st_get_homes_v2(st: dict) -> dict:
+    st = st or {}
+    hv2 = st.get("homes_v2")
+    if not isinstance(hv2, dict):
+        hv2 = {}
+        st["homes_v2"] = hv2
+    return hv2
+
+def _st_default_home_id(st: dict) -> str:
+    hid = st.get("default_home_id")
+    return hid if isinstance(hid, str) and hid else ""
+
+def _st_set_default_home_id(st: dict, hid: str) -> None:
+    if hid:
+        st["default_home_id"] = hid
+
+def _new_home_id() -> str:
+    return str(int(datetime.utcnow().timestamp()*1000))[-8:]
+
+def _ensure_default_home(st: dict, room: str, creator: str = "hub") -> str:
+    hv2 = _st_get_homes_v2(st)
+    hid = _st_default_home_id(st)
+    if hid and hid in hv2:
+        return hid
+    hid = _new_home_id()
+    hv2[hid] = {
+        "id": hid,
+        "name": "World Home",
+        "desc": f"Default home for {room}",
+        "style": "",
+        "size": "",
+        "mood": "",
+        "created_by": creator,
+        "ts": utc_ts(),
+        "rooms": [],
+        "doors": [],
+    }
+    _st_set_default_home_id(st, hid)
+    return hid
+
+def _home_v2_display(h: dict) -> str:
+    hid = h.get("id","?")
+    mood = (h.get("mood") or "").strip()
+    style = (h.get("style") or "").strip()
+    size = (h.get("size") or "").strip()
+    name = (h.get("name") or "").strip()
+    desc = (h.get("desc") or "").strip()
+    parts = []
+    if mood:
+        parts.append(mood)
+    parts.append(f"#{hid}")
+    if name:
+        parts.append(name)
+    if style:
+        parts.append(f"style:{style}")
+    if size:
+        parts.append(f"size:{size}")
+    if desc and desc != name:
+        parts.append(desc)
+    return " • ".join([p for p in parts if p])
+
+def _room_v2_display(r: dict) -> str:
+    name = (r.get("name") or "").strip()
+    style = (r.get("style") or "").strip()
+    size = (r.get("size") or "").strip()
+    mood = (r.get("mood") or "").strip()
+    parts = []
+    if mood:
+        parts.append(mood)
+    parts.append(name or "room")
+    if style:
+        parts.append(f"style:{style}")
+    if size:
+        parts.append(f"size:{size}")
+    return " • ".join([p for p in parts if p])
+
+def _get_selected_home_id(st: dict, user: str) -> str:
+    sel = st.get("selected_home_by_user") or {}
+    if isinstance(sel, dict):
+        hid = sel.get("@" + (user or "guest"))
+        if isinstance(hid, str) and hid:
+            return hid
+    return ""
+
+def _set_selected_home_id(st: dict, user: str, hid: str) -> None:
+    sel = st.get("selected_home_by_user")
+    if not isinstance(sel, dict):
+        sel = {}
+        st["selected_home_by_user"] = sel
+    sel["@" + (user or "guest")] = hid
+
+def _get_active_home(st: dict, room: str, user: str) -> tuple[str, dict]:
+    hv2 = _st_get_homes_v2(st)
+    hid = _get_selected_home_id(st, user) or _st_default_home_id(st)
+    if not hid or hid not in hv2:
+        hid = _ensure_default_home(st, room, creator=user or "hub")
+    return hid, hv2[hid]
+
+def _parse_flag(raw: str, flag: str) -> str:
+    mm = re.search(r'(?:^|\s)'+re.escape(flag)+r'\s+([^\s].*?)(?=\s+--\w+\b|$)', raw)
+    return mm.group(1).strip() if mm else ""
+
+def _parse_quoted_or_rest(raw: str) -> tuple[str, str]:
+    raw = (raw or "").strip()
+    m = re.search(r'"([^"]{1,500})"', raw)
+    if m:
+        text = m.group(1).strip()
+        rest = (raw[:m.start()] + raw[m.end():]).strip()
+        return text, rest
+    return raw.strip(), ""
+
 # --- Home Create Flags (Phase 6) ---
 def _parse_home_create_args(raw: str):
     """Parse: !home create "desc" --style X --size Y --mood 🙂
@@ -344,21 +458,23 @@ Ownership / Roles (Phase 3)
   !world addhelper @name    (Owner) add helper
   !world delhelper @name    (Owner) remove helper
 
-Homes (Phase 4 + Phase 6)
-  !home add "Room Name" --style X --size Y          Add a room to this world-home
-  !home door add --from "Room" --to "Room"        Link rooms with a door
-  !map                                             Show world + rooms + doors
-  !home create "desc" --style X --size Y --mood 🙂   Create a home entry with metadata
-  !home list                                        List saved home entries (and rooms summary)
-  !home mine                                        List your home entries
-  !home remove <id>                                 Remove a home entry (creator or world manager)
+Homes (Unified)
+  !home show                                 Show active home (alias: !map)
+  !home create "name/desc" --style X --size Y --mood 🙂   Create + select a home
+  !home select <id>                           Select an existing home (#id)
+  !home list                                  List homes in this world
+  !home mine                                  List homes you created in this world
+  !home remove <id>                           Remove a home (creator or world manager)
+  !home room add "Room" --style X --size Y --mood 🙂      Add a room (alias: !home add ...)
+  !home door add --from "A" --to "B"                  Link rooms with a door
 
 Astro (template adventure)
   !astro help                Astrology-guided adventure prompts (optional)
 
 Notes
   - Room history loads automatically when you join a world.
-  - Worlds, roles, homes, and logs persist at /var/data/worlds.db.
+  - Worlds, roles, homes, rooms/doors, and logs persist at /var/data/worlds.db.
+  - !map is now an alias of !home show (single system).
 """
 
 
@@ -2132,6 +2248,163 @@ def on_send_message(data):
     if not msg:
         return
 
+
+    # --- Unified Home Router (Phase 7) ---
+    # Streamlines duplicates: one home system with aliases.
+    if msg.startswith("!map") or msg.startswith("!home"):
+        st = _load_world_state(room) or {}
+        hv2 = _st_get_homes_v2(st)
+        parts = msg.split()
+        if msg.startswith("!map"):
+            parts = ["!home", "show"]
+        if len(parts) == 1:
+            parts = ["!home", "show"]
+        cmd = parts[1] if len(parts) > 1 else "show"
+        rest = msg.split(None, 2)[2] if len(msg.split(None, 2)) == 3 else ""
+
+        # alias: "!home add ..." => "!home room add ..."
+        if cmd == "add":
+            cmd = "room"
+            rest = ("add " + rest).strip()
+
+        if cmd == "create":
+            txt, remainder = _parse_quoted_or_rest(rest)
+            style = _parse_flag(remainder, "--style")
+            size = _parse_flag(remainder, "--size")
+            mood = _parse_flag(remainder, "--mood")
+            if not txt:
+                emit("chat_message", {"room": room, "user": "hub", "msg": 'Usage: !home create "name/desc" --style X --size Y --mood 🙂', "ts": utc_ts()}, room=sid)
+                return
+            hid = _new_home_id()
+            home = {
+                "id": hid, "name": txt, "desc": txt,
+                "style": style, "size": size, "mood": (mood or "")[:8],
+                "created_by": user, "ts": utc_ts(),
+                "rooms": [], "doors": []
+            }
+            hv2[hid] = home
+            if not _st_default_home_id(st):
+                _st_set_default_home_id(st, hid)
+            _set_selected_home_id(st, user, hid)
+            st["homes_v2"] = hv2
+            _save_world_state(room, st)
+            _emit_chat(room, room, "hub", "🏠 Home created & selected: " + _home_v2_display(home))
+            return
+
+        if cmd == "select":
+            hid = (rest or "").strip().lstrip("#")
+            if not hid or hid not in hv2:
+                emit("chat_message", {"room": room, "user": "hub", "msg": "Usage: !home select <id>  (see: !home list)", "ts": utc_ts()}, room=sid)
+                return
+            _set_selected_home_id(st, user, hid)
+            _save_world_state(room, st)
+            _emit_chat(room, room, "hub", "✅ Selected home: " + _home_v2_display(hv2[hid]))
+            return
+
+        if cmd in ("list", "all"):
+            if not hv2:
+                _emit_chat(room, room, "hub", 'No homes yet. Create one: !home create "My Home" --style cozy --size small --mood 🌌')
+                return
+            _emit_chat(room, room, "hub", "Homes in this world:\n" + "\n".join(_home_v2_display(h) for h in list(hv2.values())[:40]))
+            return
+
+        if cmd == "mine":
+            mine = [h for h in hv2.values() if (h.get("created_by") or "") == user]
+            if not mine:
+                _emit_chat(room, room, "hub", "You haven't created any homes here yet.")
+                return
+            _emit_chat(room, room, "hub", "Your homes:\n" + "\n".join(_home_v2_display(h) for h in mine[:40]))
+            return
+
+        if cmd == "remove":
+            hid = (rest or "").strip().lstrip("#")
+            if not hid or hid not in hv2:
+                emit("chat_message", {"room": room, "user": "hub", "msg": "Usage: !home remove <id>", "ts": utc_ts()}, room=sid)
+                return
+            roles = _get_world_roles(room)
+            is_manager = (roles.get("owner") == "@" + (user or "")) or (("@" + (user or "")) in (roles.get("helpers") or []))
+            if hv2[hid].get("created_by") != user and not is_manager:
+                emit("chat_message", {"room": room, "user": "hub", "msg": "⛔ Only the home creator or a world manager can remove this home.", "ts": utc_ts()}, room=sid)
+                return
+            hv2.pop(hid, None)
+            st["homes_v2"] = hv2
+            if _st_default_home_id(st) == hid:
+                st["default_home_id"] = next(iter(hv2.keys()), "")
+            sel = st.get("selected_home_by_user") or {}
+            for k,v in list(sel.items()):
+                if v == hid:
+                    sel[k] = st.get("default_home_id","")
+            st["selected_home_by_user"] = sel
+            _save_world_state(room, st)
+            _emit_chat(room, room, "hub", "🗑️ Removed home #" + str(hid) + ".")
+            return
+
+        hid, home = _get_active_home(st, room, user)
+
+        if cmd == "room":
+            sub = parts[2] if len(parts) > 2 else ""
+            if sub != "add":
+                emit("chat_message", {"room": room, "user": "hub", "msg": 'Usage: !home room add "Room" --style X --size Y --mood 🙂  (alias: !home add ...)', "ts": utc_ts()}, room=sid)
+                return
+            raw = msg.split(None, 3)[3] if len(msg.split(None, 3)) == 4 else ""
+            rname, remainder = _parse_quoted_or_rest(raw)
+            if not rname:
+                emit("chat_message", {"room": room, "user": "hub", "msg": 'Usage: !home room add "Room" --style X --size Y --mood 🙂', "ts": utc_ts()}, room=sid)
+                return
+            rstyle = _parse_flag(remainder, "--style")
+            rsize = _parse_flag(remainder, "--size")
+            rmood = _parse_flag(remainder, "--mood")
+            room_obj = {"name": rname, "style": rstyle, "size": rsize, "mood": (rmood or "")[:8], "ts": utc_ts()}
+            home.setdefault("rooms", []).append(room_obj)
+            hv2[hid] = home
+            st["homes_v2"] = hv2
+            _save_world_state(room, st)
+            _emit_chat(room, room, "hub", "✅ Added room to " + _home_v2_display(home) + ": " + _room_v2_display(room_obj))
+            return
+
+        if cmd == "door":
+            if len(parts) < 3 or parts[2] != "add":
+                emit("chat_message", {"room": room, "user": "hub", "msg": 'Usage: !home door add --from "A" --to "B"', "ts": utc_ts()}, room=sid)
+                return
+            raw = msg.split(None, 3)[3] if len(msg.split(None, 3)) == 4 else ""
+            frm = _parse_flag(raw, "--from").strip('"')
+            to = _parse_flag(raw, "--to").strip('"')
+            if not frm or not to:
+                emit("chat_message", {"room": room, "user": "hub", "msg": 'Usage: !home door add --from "A" --to "B"', "ts": utc_ts()}, room=sid)
+                return
+            home.setdefault("doors", []).append({"from": frm, "to": to})
+            hv2[hid] = home
+            st["homes_v2"] = hv2
+            _save_world_state(room, st)
+            _emit_chat(room, room, "hub", "🚪 Linked in " + (home.get("name","home") or "home") + ": " + frm + "  →  " + to)
+            return
+
+        if cmd in ("show", "map"):
+            w = st.get("world") or {}
+            header = "== " + str(room) + " :: World =="
+            if w:
+                wline = f"{w.get('name', room.lstrip('#'))} | biome={w.get('biome','—')} | magic={w.get('magic','—')} | factions={w.get('factions','—')}"
+            else:
+                wline = f"{room.lstrip('#')} | (no world metadata yet)"
+            out = [header, wline, "", "== Active Home ==", _home_v2_display(home), "", "== Rooms =="]
+            rooms = home.get("rooms") or []
+            if not rooms:
+                out.append('(no rooms yet)  try: !home room add "Marble Foyer" --style gothic --size large --mood 🌌')
+            else:
+                for r in rooms[:60]:
+                    out.append("- " + _room_v2_display(r))
+            out += ["", "== Doors =="]
+            doors = home.get("doors") or []
+            if not doors:
+                out.append('(no doors yet)  try: !home door add --from "Marble Foyer" --to "Library"')
+            else:
+                for d in doors[:80]:
+                    out.append(f"* {d.get('from','?')}  ->  {d.get('to','?')}")
+            _emit_chat(room, room, "hub", "\n".join(out))
+            return
+
+        emit("chat_message", {"room": room, "user": "hub", "msg": "Try: !home show • !home create • !home list • !home room add • !home door add", "ts": utc_ts()}, room=sid)
+        return
     # /list: running channels
     if msg in ("/list", "!list"):
         counts = _room_counts()
@@ -2322,6 +2595,34 @@ def on_send_message(data):
             _emit_chat(sid, room, "hub", f"{label} — {desc}")
         return
 
+
+    # !home create (Phase 6) — create a saved home entry with metadata
+    if msg.startswith("!home create"):
+        raw = msg[len("!home create"):].strip()
+        args = _parse_home_create_args(raw)
+        if not args.get("desc"):
+            _emit_chat(sid, room, "hub", 'Usage: !home create "description" --style cozy --size small --mood 🌌')
+            return
+        home = {
+            "id": str(int(datetime.utcnow().timestamp()*1000))[-8:],
+            "created_by": user,
+            "desc": args.get("desc", ""),
+            "style": args.get("style", ""),
+            "size": args.get("size", ""),
+            "mood": args.get("mood", ""),
+            "ts": utc_ts(),
+        }
+        st = _normalize_homes_state(_world_state_by_room.get(room) or {})
+        homes = st.get("homes") or {}
+        owner_key = "@" + (user or "guest")
+        arr = homes.get(owner_key) or []
+        arr.append(home)
+        homes[owner_key] = arr
+        st["homes"] = homes
+        _world_state_by_room[room] = st
+        _save_world_state(room, st)
+        _emit_chat(room, room, "hub", "✅ Home created: " + _home_display(home))
+        return
 
     # !home mine / !home list / !home remove <id> (Phase 4)
     if msg in ("!home mine", "!homes mine"):

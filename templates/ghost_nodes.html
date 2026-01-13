@@ -230,7 +230,17 @@
   
     .pillRow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 0}
     .userPill{cursor:pointer}
-  </style>
+  
+    /* On-screen keyboard (touch helper) */
+    #kbdPanel { display: none; margin-top: 10px; padding: 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; }
+    #kbdPanel.show { display: block; }
+    .kbdRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .kbdKey { padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); background: rgba(15, 23, 42, 0.55); color: #e5e7eb; cursor: pointer; font-size: 12px; }
+    .kbdKey:hover { filter: brightness(1.1); }
+    .kbdKey.wide { padding: 6px 14px; }
+    .kbdKey.primary { border-color: rgba(59,130,246,0.5); }
+
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -318,6 +328,42 @@
           <code>!map</code>
           &nbsp; • &nbsp;
           <code>!users</code>
+
+<div class="row" style="margin-top: 10px; gap: 8px; align-items: center;">
+  <button id="kbdToggle" class="btn secondary" title="On-screen keyboard (touch)">⌨️</button>
+  <span class="subtitle" style="margin: 0;">Touch keyboard for phones/tablets</span>
+</div>
+<div id="kbdPanel" aria-label="On-screen keyboard">
+  <div class="subtitle" style="margin: 0 0 6px 0;">Tap to insert into the chat box:</div>
+
+  <div class="kbdRow">
+    <button class="kbdKey primary" data-kbd="/list">/list</button>
+    <button class="kbdKey primary" data-kbd="/join #lobby">/join #lobby</button>
+    <button class="kbdKey primary" data-kbd="/join #101-kathleen">/join #101-kathleen</button>
+    <button class="kbdKey primary" data-kbd="/join #witness-hall">/join #witness-hall</button>
+    <button class="kbdKey primary" data-kbd="/join #terminal">/join #terminal</button>
+    <button class="kbdKey primary" data-kbd="!help">!help</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey" data-kbd="/">/</button>
+    <button class="kbdKey" data-kbd="#">#</button>
+    <button class="kbdKey" data-kbd="!">!</button>
+    <button class="kbdKey" data-kbd="--">--</button>
+    <button class="kbdKey" data-kbd='"'>&quot;</button>
+    <button class="kbdKey" data-kbd="@">@</button>
+    <button class="kbdKey" data-kbd="🙂">🙂</button>
+    <button class="kbdKey" data-kbd="🌌">🌌</button>
+    <button class="kbdKey" data-kbd="🗝️">🗝️</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-kbd-action="space">Space</button>
+    <button class="kbdKey wide" data-kbd-action="backspace">⌫</button>
+    <button class="kbdKey wide primary" data-kbd-action="send">Send</button>
+  </div>
+</div>
+
         </div>
       </div>
 
@@ -1016,6 +1062,60 @@ async function encryptSealed(aesKey, ivU8, plaintext) {
       const dec = new TextDecoder();
       return dec.decode(pt);
     }
-  </script>
+  
+// On-screen keyboard (touch helper)
+const kbdToggle = document.getElementById("kbdToggle");
+const kbdPanel = document.getElementById("kbdPanel");
+function kbdTarget() {
+  // Prefer main chat input
+  return document.getElementById("chatMsg");
+}
+function kbdInsert(s) {
+  const el = kbdTarget();
+  if (!el) return;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const v = el.value || "";
+  el.value = v.slice(0, start) + s + v.slice(end);
+  const pos = start + s.length;
+  try { el.setSelectionRange(pos, pos); } catch(e) {}
+  el.focus();
+}
+function kbdBackspace() {
+  const el = kbdTarget();
+  if (!el) return;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const v = el.value || "";
+  if (start !== end) {
+    el.value = v.slice(0, start) + v.slice(end);
+    try { el.setSelectionRange(start, start); } catch(e) {}
+  } else if (start > 0) {
+    el.value = v.slice(0, start - 1) + v.slice(start);
+    try { el.setSelectionRange(start - 1, start - 1); } catch(e) {}
+  }
+  el.focus();
+}
+function kbdSend() {
+  const btn = document.getElementById("sendBtn");
+  if (btn) btn.click();
+}
+if (kbdToggle && kbdPanel) {
+  kbdToggle.addEventListener("click", () => {
+    kbdPanel.classList.toggle("show");
+  });
+  kbdPanel.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    const ins = t.getAttribute("data-kbd");
+    const act = t.getAttribute("data-kbd-action");
+    if (ins) { kbdInsert(ins); return; }
+    if (act === "space") { kbdInsert(" "); return; }
+    if (act === "backspace") { kbdBackspace(); return; }
+    if (act === "send") { kbdSend(); return; }
+  });
+}
+
+</script>
 </body>
 </html>
