@@ -231,14 +231,15 @@
     .pillRow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 0}
     .userPill{cursor:pointer}
   
-    /* On-screen keyboard (touch helper) */
-    #kbdPanel { display: none; margin-top: 10px; padding: 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; }
-    #kbdPanel.show { display: block; }
-    .kbdRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    .kbdKey { padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); background: rgba(15, 23, 42, 0.55); color: #e5e7eb; cursor: pointer; font-size: 12px; }
-    .kbdKey:hover { filter: brightness(1.1); }
-    .kbdKey.wide { padding: 6px 14px; }
-    .kbdKey.primary { border-color: rgba(59,130,246,0.5); }
+/* Full on-screen keyboard (touch) */
+#kbdPanel { display:none; margin-top:10px; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; background:rgba(2,6,23,0.65); }
+#kbdPanel.show { display:block; }
+.kbdRow { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.kbdKey { padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(15,23,42,0.55); color:#e5e7eb; cursor:pointer; font-size:13px; }
+.kbdKey:hover { filter:brightness(1.1); }
+.kbdKey.wide { flex:1; }
+.kbdKey.primary { border-color:rgba(59,130,246,0.5); }
+.kbdKey.toggle { border-color:rgba(16,185,129,0.5); }
 
 </style>
 </head>
@@ -328,39 +329,43 @@
           <code>!map</code>
           &nbsp; • &nbsp;
           <code>!users</code>
-
-<div class="row" style="margin-top: 10px; gap: 8px; align-items: center;">
-  <button id="kbdToggle" class="btn secondary" title="On-screen keyboard (touch)">⌨️</button>
-  <span class="subtitle" style="margin: 0;">Touch keyboard for phones/tablets</span>
+<div class="row" style="margin-top:10px;gap:8px;align-items:center;">
+  <button id="kbdToggle" class="btn secondary">⌨️</button>
+  <span class="subtitle">On‑screen keyboard</span>
 </div>
-<div id="kbdPanel" aria-label="On-screen keyboard">
-  <div class="subtitle" style="margin: 0 0 6px 0;">Tap to insert into the chat box:</div>
 
+<div id="kbdPanel">
   <div class="kbdRow">
     <button class="kbdKey primary" data-kbd="/list">/list</button>
     <button class="kbdKey primary" data-kbd="/join #lobby">/join #lobby</button>
-    <button class="kbdKey primary" data-kbd="/join #101-kathleen">/join #101-kathleen</button>
-    <button class="kbdKey primary" data-kbd="/join #witness-hall">/join #witness-hall</button>
-    <button class="kbdKey primary" data-kbd="/join #terminal">/join #terminal</button>
     <button class="kbdKey primary" data-kbd="!help">!help</button>
   </div>
 
   <div class="kbdRow">
-    <button class="kbdKey" data-kbd="/">/</button>
-    <button class="kbdKey" data-kbd="#">#</button>
-    <button class="kbdKey" data-kbd="!">!</button>
-    <button class="kbdKey" data-kbd="--">--</button>
-    <button class="kbdKey" data-kbd='"'>&quot;</button>
-    <button class="kbdKey" data-kbd="@">@</button>
-    <button class="kbdKey" data-kbd="🙂">🙂</button>
-    <button class="kbdKey" data-kbd="🌌">🌌</button>
-    <button class="kbdKey" data-kbd="🗝️">🗝️</button>
+    <button class="kbdKey">Q</button><button class="kbdKey">W</button><button class="kbdKey">E</button>
+    <button class="kbdKey">R</button><button class="kbdKey">T</button><button class="kbdKey">Y</button>
+    <button class="kbdKey">U</button><button class="kbdKey">I</button><button class="kbdKey">O</button><button class="kbdKey">P</button>
+  </div>
+  <div class="kbdRow">
+    <button class="kbdKey">A</button><button class="kbdKey">S</button><button class="kbdKey">D</button>
+    <button class="kbdKey">F</button><button class="kbdKey">G</button><button class="kbdKey">H</button>
+    <button class="kbdKey">J</button><button class="kbdKey">K</button><button class="kbdKey">L</button>
+  </div>
+  <div class="kbdRow">
+    <button class="kbdKey">Z</button><button class="kbdKey">X</button><button class="kbdKey">C</button>
+    <button class="kbdKey">V</button><button class="kbdKey">B</button><button class="kbdKey">N</button><button class="kbdKey">M</button>
   </div>
 
   <div class="kbdRow">
-    <button class="kbdKey wide" data-kbd-action="space">Space</button>
-    <button class="kbdKey wide" data-kbd-action="backspace">⌫</button>
-    <button class="kbdKey wide primary" data-kbd-action="send">Send</button>
+    <button class="kbdKey">/</button><button class="kbdKey">#</button><button class="kbdKey">!</button>
+    <button class="kbdKey">"</button><button class="kbdKey">@</button>
+    <button class="kbdKey">🙂</button><button class="kbdKey">🌌</button><button class="kbdKey">🗝️</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="space">Space</button>
+    <button class="kbdKey wide" data-act="back">⌫</button>
+    <button class="kbdKey wide primary" data-act="send">Send</button>
   </div>
 </div>
 
@@ -1063,57 +1068,32 @@ async function encryptSealed(aesKey, ivU8, plaintext) {
       return dec.decode(pt);
     }
   
-// On-screen keyboard (touch helper)
+// Touch keyboard logic
 const kbdToggle = document.getElementById("kbdToggle");
 const kbdPanel = document.getElementById("kbdPanel");
-function kbdTarget() {
-  // Prefer main chat input
-  return document.getElementById("chatMsg");
+function kbdTarget(){return document.getElementById("chatMsg");}
+function kbdInsert(ch){
+  const el=kbdTarget(); if(!el) return;
+  const s=el.selectionStart??el.value.length, e=el.selectionEnd??el.value.length;
+  el.value=(el.value||"").slice(0,s)+ch+(el.value||"").slice(e);
+  el.focus(); try{el.setSelectionRange(s+ch.length,s+ch.length);}catch(e){}
 }
-function kbdInsert(s) {
-  const el = kbdTarget();
-  if (!el) return;
-  const start = el.selectionStart ?? el.value.length;
-  const end = el.selectionEnd ?? el.value.length;
-  const v = el.value || "";
-  el.value = v.slice(0, start) + s + v.slice(end);
-  const pos = start + s.length;
-  try { el.setSelectionRange(pos, pos); } catch(e) {}
+function kbdBack(){const el=kbdTarget(); if(!el) return;
+  const s=el.selectionStart??el.value.length, e=el.selectionEnd??el.value.length;
+  if(s!==e){el.value=el.value.slice(0,s)+el.value.slice(e);}
+  else if(s>0){el.value=el.value.slice(0,s-1)+el.value.slice(s);}
   el.focus();
 }
-function kbdBackspace() {
-  const el = kbdTarget();
-  if (!el) return;
-  const start = el.selectionStart ?? el.value.length;
-  const end = el.selectionEnd ?? el.value.length;
-  const v = el.value || "";
-  if (start !== end) {
-    el.value = v.slice(0, start) + v.slice(end);
-    try { el.setSelectionRange(start, start); } catch(e) {}
-  } else if (start > 0) {
-    el.value = v.slice(0, start - 1) + v.slice(start);
-    try { el.setSelectionRange(start - 1, start - 1); } catch(e) {}
-  }
-  el.focus();
-}
-function kbdSend() {
-  const btn = document.getElementById("sendBtn");
-  if (btn) btn.click();
-}
-if (kbdToggle && kbdPanel) {
-  kbdToggle.addEventListener("click", () => {
-    kbdPanel.classList.toggle("show");
-  });
-  kbdPanel.addEventListener("click", (ev) => {
-    const t = ev.target;
-    if (!(t instanceof HTMLElement)) return;
-    const ins = t.getAttribute("data-kbd");
-    const act = t.getAttribute("data-kbd-action");
-    if (ins) { kbdInsert(ins); return; }
-    if (act === "space") { kbdInsert(" "); return; }
-    if (act === "backspace") { kbdBackspace(); return; }
-    if (act === "send") { kbdSend(); return; }
-  });
+if(kbdToggle&&kbdPanel){
+  kbdToggle.onclick=()=>kbdPanel.classList.toggle("show");
+  kbdPanel.onclick=(ev)=>{
+    const t=ev.target;
+    if(t.dataset.kbd) kbdInsert(t.dataset.kbd);
+    else if(t.innerText && t.innerText.length===1) kbdInsert(t.innerText);
+    else if(t.dataset.act==="space") kbdInsert(" ");
+    else if(t.dataset.act==="back") kbdBack();
+    else if(t.dataset.act==="send") document.getElementById("sendBtn")?.click();
+  };
 }
 
 </script>
