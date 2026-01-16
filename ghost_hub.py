@@ -2542,6 +2542,21 @@ def on_send_message(data):
         return
 
 
+
+    # --- MULTI-COMMAND: allow button rows like "!map • !users" ---
+    if '•' in msg and msg.lstrip().startswith('!'):
+        parts_multi = [p.strip() for p in msg.split('•') if p.strip()]
+        if len(parts_multi) > 1:
+            for part in parts_multi:
+                if part == msg:
+                    continue
+                try:
+                    on_send_message({**(data or {}), 'user': user, 'room': room, 'msg': part})
+                except Exception:
+                    # fallback: just emit a hint
+                    emit('chat_message', {'room': room, 'sender': 'hub', 'msg': f'⚠️ Could not run: {part}', 'ts': utc_ts()}, to=sid)
+            return
+
     # --- Unified Home Router (Phase 7) ---
     # Streamlines duplicates: one home system with aliases.
     if msg.startswith("!map") or msg.startswith("!home"):
@@ -2632,6 +2647,86 @@ def on_send_message(data):
             _emit_chat(room, room, "hub", "🗑️ Removed home #" + str(hid) + ".")
             return
 
+
+
+        if cmd == "build":
+            # !home build  -> show usage + preset menu
+            # !home build --preset 2 -> runs preset
+            # !home build --name ... -> runs builder
+            import re as _re
+
+            raw = rest or ""
+            toks = _parse_args(raw)
+
+            # Preset list (1..12)
+            presets = [
+                ("Cozy Bungalow", dict(type="bungalow", style="cozy", bedrooms=2, bathrooms=1, kitchen=1, total_rooms=7, mood="calm", color_sheen="warm ivory")),
+                ("Alien Glass Pod", dict(type="pod", style="alien", bedrooms=3, bathrooms=2, kitchen=1, total_rooms=10, mood="calm", color_sheen="blue white")),
+                ("Gothic Manor", dict(type="manor", style="gothic", bedrooms=6, bathrooms=4, kitchen=1, total_rooms=18, mood="mysterious", color_sheen="black gold")),
+                ("Forest Cabin", dict(type="cabin", style="rustic", bedrooms=1, bathrooms=1, kitchen=1, total_rooms=6, mood="grounded", color_sheen="cedar amber")),
+                ("Skyloft Observatory", dict(type="skyloft", style="celestial", bedrooms=2, bathrooms=2, kitchen=1, total_rooms=12, mood="awe", color_sheen="silver moon")),
+                ("Suburban Mixed", dict(type="house", style="mixed", bedrooms=4, bathrooms=3, kitchen=1, total_rooms=11, mood="bright", color_sheen="white oak")),
+                ("Temple Retreat", dict(type="retreat", style="new-age", bedrooms=3, bathrooms=2, kitchen=1, total_rooms=14, mood="enlightened", color_sheen="opal")),
+                ("Fortress Keep", dict(type="keep", style="stone", bedrooms=8, bathrooms=4, kitchen=1, total_rooms=22, mood="steadfast", color_sheen="iron grey")),
+                ("Undersea Dome", dict(type="dome", style="aquatic", bedrooms=5, bathrooms=3, kitchen=1, total_rooms=16, mood="dreamy", color_sheen="teal pearl")),
+                ("Tiny Studio", dict(type="studio", style="minimal", bedrooms=0, bathrooms=1, kitchen=1, total_rooms=4, mood="focused", color_sheen="matte white")),
+                ("Arcade Villa", dict(type="villa", style="neon", bedrooms=4, bathrooms=3, kitchen=1, total_rooms=15, mood="playful", color_sheen="pink cyan")),
+                ("Ryoko Homeforge", dict(type="estate", style="mixed", bedrooms=12, bathrooms=8, kitchen=2, total_rooms=30, mood="enlightened", color_sheen="blue white")),
+            ]
+
+            preset = None
+            if toks:
+                if str(toks[0]).isdigit():
+                    preset = int(toks.pop(0))
+                else:
+                    pv = _get_flag(toks, "--preset", None) or _get_flag(toks, "--option", None)
+                    if pv and str(pv).isdigit():
+                        preset = int(pv)
+
+            if not toks and preset is None:
+                lines = [
+                    "🏠 **Home Builder**",
+                    "",
+                    "**Format:**",
+                    '!home build --name "Title" --type "bungalow" --bedrooms "3" --bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"',
+                    "",
+                    "**Quick options:**",
+                ]
+                for i,(label,_cfg) in enumerate(presets, start=1):
+                    lines.append(f"{i}) {label}  →  !home build --preset {i}")
+                lines.append("")
+                lines.append("Tip: `!home build 2` works too.")
+                _emit_chat(room, room, "hub", "\n".join(lines))
+                return
+
+            # If using a preset, translate into flags
+            if preset is not None:
+                if preset < 1 or preset > len(presets):
+                    _emit_chat(room, room, "hub", f"Usage: !home build --preset 1-{len(presets)}")
+                    return
+                label, cfg = presets[preset-1]
+                # Optional name override
+                nm = _get_flag(toks, "--name", None)
+                if not nm:
+                    nm = label
+                toks.extend([
+                    "--name", nm,
+                    "--type", cfg.get("type","estate"),
+                    "--bedrooms", str(cfg.get("bedrooms",0)),
+                    "--bathrooms", str(cfg.get("bathrooms",0)),
+                    "--style", cfg.get("style","mixed"),
+                    "--kitchen", str(cfg.get("kitchen",1)),
+                    "--total_rooms", str(cfg.get("total_rooms",0)),
+                    "--mood", cfg.get("mood","neutral"),
+                    "--color_sheen", cfg.get("color_sheen",""),
+                ])
+
+            # Finally run the builder (uses homes_v2)
+            msg_out = _home_build(room, user, toks)
+            _emit_chat(room, room, "hub", msg_out)
+            return
+
+        # Home Builder Presets END
         hid, home = _get_active_home(st, room, user)
 
         if cmd == "room":
@@ -2696,6 +2791,73 @@ def on_send_message(data):
             _emit_chat(room, room, "hub", "\n".join(out))
             return
 
+        
+
+        if cmd == "build":
+            raw = msg.split(None, 2)[2] if len(msg.split(None, 2)) == 3 else ""
+            toks = _parse_args(raw)
+
+            # Preset selector: !home build 2  OR  !home build --preset 2
+            preset = None
+            if toks and str(toks[0]).isdigit():
+                preset = int(toks.pop(0))
+            else:
+                pval = _parse_flag(raw, "--preset")
+                if pval and str(pval).strip().isdigit():
+                    preset = int(str(pval).strip())
+
+            presets = [
+                {"label": "Cozy Bungalow", "type": "bungalow", "style": "cozy", "bedrooms": 2, "bathrooms": 1, "kitchen": 1, "total_rooms": 7, "mood": "calm", "color_sheen": "warm ivory"},
+                {"label": "Alien Glass Pod", "type": "bungalow", "style": "alien", "bedrooms": 3, "bathrooms": 2, "kitchen": 1, "total_rooms": 8, "mood": "calm", "color_sheen": "blue white"},
+                {"label": "Gothic Manor", "type": "manor", "style": "gothic", "bedrooms": 6, "bathrooms": 4, "kitchen": 1, "total_rooms": 18, "mood": "mysterious", "color_sheen": "black gold"},
+                {"label": "Forest Cabin", "type": "cabin", "style": "rustic", "bedrooms": 1, "bathrooms": 1, "kitchen": 1, "total_rooms": 6, "mood": "grounded", "color_sheen": "cedar amber"},
+                {"label": "Temple Retreat", "type": "retreat", "style": "new-age", "bedrooms": 3, "bathrooms": 2, "kitchen": 1, "total_rooms": 14, "mood": "enlightened", "color_sheen": "opal"},
+                {"label": "Ryoko Homeforge", "type": "estate", "style": "mixed", "bedrooms": 12, "bathrooms": 8, "kitchen": 2, "total_rooms": 30, "mood": "enlightened", "color_sheen": "blue white"},
+            ]
+
+            if preset is None and not raw.strip():
+                lines = [
+                    "🏠 **Home Builder**",
+                    "",
+                    "**Format:**",
+                    '!home build --name "Title" --type "bungalow" --bedrooms "3" --bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"',
+                    "",
+                    "**Quick options:**",
+                ]
+                for i, pr in enumerate(presets, start=1):
+                    lines.append(f"{i}) {pr['label']}  →  !home build --preset {i}")
+                lines.append("")
+                lines.append("Tip: `!home build 2` is the same as preset 2.")
+                _emit_chat(room, room, "hub", "\n".join(lines))
+                return
+
+            if preset is not None:
+                if preset < 1 or preset > len(presets):
+                    _emit_chat(room, room, "hub", f"Usage: !home build --preset 1-{len(presets)}")
+                    return
+                pr = presets[preset - 1]
+                # allow overriding name
+                nm = _parse_flag(raw, "--name")
+                if nm:
+                    pr = dict(pr)
+                    pr['name'] = nm.strip('"')
+                gen_args = [
+                    "--name", pr.get('name') or pr['label'],
+                    "--type", pr['type'],
+                    "--bedrooms", str(pr['bedrooms']),
+                    "--bathrooms", str(pr['bathrooms']),
+                    "--style", pr['style'],
+                    "--kitchen", str(pr['kitchen']),
+                    "--total_rooms", str(pr['total_rooms']),
+                    "--mood", pr['mood'],
+                    "--color_sheen", pr['color_sheen'],
+                ]
+                _emit_chat(room, room, "hub", _home_build(room, user, gen_args))
+                return
+
+            # Normal builder: run with provided flags
+            _emit_chat(room, room, "hub", _home_build(room, user, toks))
+            return
         emit("chat_message", {"room": room, "user": "hub", "msg": "Try: !home show • !home create • !home list • !home room add • !home door add", "ts": utc_ts()}, room=sid)
         return
     # /list: running channels
