@@ -1829,6 +1829,174 @@ def _home_build(room: str, user: str, args: list):
 
     return f"🏠 Built home: {name} ({htype}) • bedrooms:{bedrooms} • baths:{bathrooms} • rooms:{total_rooms} • style:{style} • mood:{mood} • color:{color} • id:{hid}"
 
+# --- Interactive Home Designer (Wizard) -------------------------------------
+# Per-room + per-user wizard state. Keeps the experience lightweight and safe.
+_HOME_WIZARD = {}  # key: (room, user) -> dict
+
+def _wizard_key(room: str, user: str):
+    return (str(room or "").strip(), str(user or "").strip().lower())
+
+def _home_wizard_active(room: str, user: str) -> bool:
+    return _wizard_key(room, user) in _HOME_WIZARD
+
+def _home_wizard_cancel(room: str, user: str) -> str:
+    _HOME_WIZARD.pop(_wizard_key(room, user), None)
+    return "🧹 Home Designer cancelled."
+
+def _home_wizard_start(room: str, user: str) -> str:
+    k = _wizard_key(room, user)
+    _HOME_WIZARD[k] = {
+        "step": "name",
+        "data": {},
+        "started_at": utc_ts(),
+    }
+    return (
+        "🏠 **Home Designer (Interactive)**\n"
+        "Answer each step. You can type `cancel` anytime.\n\n"
+        "**Step 1/9 — Name**\n"
+        "What is the home name/title? (example: `Marble Haven`)"
+    )
+
+def _home_wizard_prompt(step: str) -> str:
+    if step == "type":
+        return (
+            "**Step 2/9 — Type**\n"
+            "Pick a type (number or word):\n"
+            "1) bungalow  2) cabin  3) manor  4) apartment  5) keep\n"
+            "6) pod  7) dome  8) retreat  9) skyloft  10) house\n"
+            "Type a number (1-10) or a word."
+        )
+    if step == "bedrooms":
+        return "**Step 3/9 — Bedrooms**\nHow many bedrooms? (0–30)"
+    if step == "bathrooms":
+        return "**Step 4/9 — Bathrooms**\nHow many bathrooms? (0–30)"
+    if step == "kitchen":
+        return "**Step 5/9 — Kitchen**\nHow many kitchens? (0–5)"
+    if step == "total_rooms":
+        return "**Step 6/9 — Total Rooms**\nTotal rooms overall? (1–30)"
+    if step == "style":
+        return (
+            "**Step 7/9 — Style**\n"
+            "Pick a style (or type your own):\n"
+            "alien, gothic, new-age, rustic, minimal, mixed, futuristic, temple, aquatic"
+        )
+    if step == "mood":
+        return (
+            "**Step 8/9 — Mood**\n"
+            "Pick a mood (or type your own):\n"
+            "calm, enlightened, mysterious, grounded, bright, awe, steadfast, dreamy, focused"
+        )
+    if step == "color_sheen":
+        return "**Step 9/9 — Color Sheen**\nExample: `blue white`, `black gold`, `silver moon`"
+    return ""
+
+def _home_wizard_finish(room: str, user: str, data: dict) -> str:
+    # Build args list for the existing builder
+    args = [
+        "--name", str(data.get("name","Home")),
+        "--type", str(data.get("type","house")),
+        "--bedrooms", str(data.get("bedrooms",0)),
+        "--bathrooms", str(data.get("bathrooms",0)),
+        "--style", str(data.get("style","mixed")),
+        "--kitchen", str(data.get("kitchen",1)),
+        "--total_rooms", str(data.get("total_rooms",0)),
+        "--mood", str(data.get("mood","neutral")),
+        "--color_sheen", str(data.get("color_sheen","")),
+    ]
+    built = _home_build(room, user, args)
+    cmdline = (
+        f'!home build --name "{data.get("name","Home")}" '
+        f'--type "{data.get("type","house")}" '
+        f'--bedrooms "{data.get("bedrooms",0)}" '
+        f'--bathrooms "{data.get("bathrooms",0)}" '
+        f'--style "{data.get("style","mixed")}" '
+        f'--kitchen "{data.get("kitchen",1)}" '
+        f'--total_rooms "{data.get("total_rooms",0)}" '
+        f'--mood "{data.get("mood","neutral")}" '
+        f'--color_sheen "{data.get("color_sheen","")}"'
+    )
+    return built + "\n\n📌 **Command used**\n" + cmdline
+
+def _home_wizard_handle(room: str, user: str, msg: str) -> str | None:
+    # Returns response message if wizard handled input, else None.
+    k = _wizard_key(room, user)
+    st = _HOME_WIZARD.get(k)
+    if not st:
+        return None
+
+    t = (msg or "").strip()
+    if not t:
+        return _home_wizard_prompt(st["step"])
+
+    if t.lower() in {"cancel", "!cancel", "!home cancel", "quit", "exit"}:
+        return _home_wizard_cancel(room, user)
+
+    step = st["step"]
+    data = st["data"]
+
+    def clamp_int(val, lo, hi, default):
+        try:
+            n = int(str(val).strip())
+        except Exception:
+            return default
+        if n < lo: n = lo
+        if n > hi: n = hi
+        return n
+
+    # Step handlers
+    if step == "name":
+        data["name"] = t.strip().strip('"')
+        st["step"] = "type"
+        return "✅ Name set: **" + data["name"] + "**\n\n" + _home_wizard_prompt("type")
+
+    if step == "type":
+        type_map = {
+            "1":"bungalow","2":"cabin","3":"manor","4":"apartment","5":"keep",
+            "6":"pod","7":"dome","8":"retreat","9":"skyloft","10":"house"
+        }
+        low = t.lower().strip().strip('"')
+        data["type"] = type_map.get(low, low)
+        st["step"] = "bedrooms"
+        return "✅ Type set: **" + data["type"] + "**\n\n" + _home_wizard_prompt("bedrooms")
+
+    if step == "bedrooms":
+        data["bedrooms"] = clamp_int(t, 0, 30, 3)
+        st["step"] = "bathrooms"
+        return "✅ Bedrooms: **" + str(data["bedrooms"]) + "**\n\n" + _home_wizard_prompt("bathrooms")
+
+    if step == "bathrooms":
+        data["bathrooms"] = clamp_int(t, 0, 30, 2)
+        st["step"] = "kitchen"
+        return "✅ Bathrooms: **" + str(data["bathrooms"]) + "**\n\n" + _home_wizard_prompt("kitchen")
+
+    if step == "kitchen":
+        data["kitchen"] = clamp_int(t, 0, 5, 1)
+        st["step"] = "total_rooms"
+        return "✅ Kitchens: **" + str(data["kitchen"]) + "**\n\n" + _home_wizard_prompt("total_rooms")
+
+    if step == "total_rooms":
+        data["total_rooms"] = clamp_int(t, 1, 30, 8)
+        st["step"] = "style"
+        return "✅ Total rooms: **" + str(data["total_rooms"]) + "**\n\n" + _home_wizard_prompt("style")
+
+    if step == "style":
+        data["style"] = t.strip().strip('"')
+        st["step"] = "mood"
+        return "✅ Style: **" + data["style"] + "**\n\n" + _home_wizard_prompt("mood")
+
+    if step == "mood":
+        data["mood"] = t.strip().strip('"')
+        st["step"] = "color_sheen"
+        return "✅ Mood: **" + data["mood"] + "**\n\n" + _home_wizard_prompt("color_sheen")
+
+    if step == "color_sheen":
+        data["color_sheen"] = t.strip().strip('"')
+        # Finish
+        _HOME_WIZARD.pop(k, None)
+        return "✨ Building now…\n\n" + _home_wizard_finish(room, user, data)
+
+    return None
+
 
 def _get_flag(args, name, default=None):
     if name in args:
@@ -2557,6 +2725,16 @@ def on_send_message(data):
                     emit('chat_message', {'room': room, 'sender': 'hub', 'msg': f'⚠️ Could not run: {part}', 'ts': utc_ts()}, to=sid)
             return
 
+
+    # --- Interactive Home Designer (Wizard) ---
+    # If a user has an active wizard, treat their next message as wizard input
+    # unless they are issuing a different command that starts with '!home build'.
+    if _home_wizard_active(room, user):
+        if not msg.lstrip().startswith("!home build"):
+            resp = _home_wizard_handle(room, user, msg)
+            if resp:
+                _emit_chat(room, room, "hub", resp)
+                return
     # --- Unified Home Router (Phase 7) ---
     # Streamlines duplicates: one home system with aliases.
     if msg.startswith("!map") or msg.startswith("!home"):
@@ -2657,6 +2835,21 @@ def on_send_message(data):
 
             raw = rest or ""
             toks = _parse_args(raw)
+
+            # If no args were provided, launch the interactive designer (wizard)
+            if not (raw or "").strip():
+                _emit_chat(room, room, "hub", _home_wizard_start(room, user))
+                return
+
+            # Explicit format/usage output (copy-paste friendly)
+            if ("--format" in toks) or ("--usage" in toks) or ("--help" in toks):
+                _emit_chat(room, room, "hub",
+                    'Usage:\n'
+                    '!home build --name "Title" --type "bungalow" --bedrooms "3" --bathrooms "2" '
+                    '--style "alien" --kitchen "1" --total_rooms "8" --mood "calm" --color_sheen "blue white"\n\n'
+                    'Tip: run `!home build` with no args to use the interactive designer.'
+                )
+                return
 
             # Preset list (1..12)
             presets = [
