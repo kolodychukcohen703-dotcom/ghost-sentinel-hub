@@ -1415,7 +1415,7 @@ def on_disconnect():
                 pass
 
     _emit_room_user_list(MAIN_ROOM)
-_emit_user_list()
+    _emit_user_list()
 
 
 @socketio.on("join")
