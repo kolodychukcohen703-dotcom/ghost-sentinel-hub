@@ -1951,8 +1951,6 @@ Use `!world list` / `!world select <id|name>` to change it, or `!home move ...` 
 **Step 1/9 — Name**
 What is the home name/title? (example: `Marble Haven`)
 """)
-"
-    )
 
 
 def _home_wizard_prompt(step: str) -> str:
@@ -2287,8 +2285,6 @@ Tip: the world you create becomes the **active world** for this room.
 **Step 1/9 — Name**
 What is the world name? (example: `Ryoko World`)
 """)
-"
-    )
 
 
 def _world_wizard_prompt(step: str) -> str:
@@ -2675,7 +2671,7 @@ def _map(room: str):
         lines.append("(none yet)  → Try: `!home build` or `!home create`")
 
     lines.append("")
-    lines.append("Tips: `!world list`, `!world select <id|name>`, `!home move --to_world <id|name> --city "X" --area "Y" --pin "Z"`")
+    lines.append("Tips: `!world list`, `!world select <id|name>`, `!home move --to_world <id|name> --city 'X' --area 'Y' --pin 'Z'`")
     return "\n".join(lines)
 
 
@@ -2828,13 +2824,10 @@ def maybe_run_bot(room: str, user: str, msg: str):
         elif sub in {"select", "use"}:
             _bot_emit(room, _cmd_world_select(room, args))
         else:
-            _bot_emit(room, "Usage:
-"
-                           "!world create <name>
-"
-                           "!world list
-"
-                           "!world select <id|name>")
+            _bot_emit(room, """Usage:
+!world create <name>
+!world list
+!world select <id|name>""")
         return
     if cmd == "!home":
         sub = (args.pop(0).lower() if args else "")
@@ -2853,17 +2846,12 @@ def maybe_run_bot(room: str, user: str, msg: str):
             else:
                 _bot_emit(room, 'Usage: !home door add --from "Room A" --to "Room B"')
         else:
-            _bot_emit(room, "Usage:
-"
-                           "!home build (interactive)
-"
-                           "!home build --format
-"
-                           "!home move --to_world <id|name> --city "X" --area "Y" --pin "Z"
-"
-                           "!home where
-"
-                           "!home door add --from "A" --to "B"")
+            _bot_emit(room, """Usage:
+!home build (interactive)
+!home build --format
+!home move --to_world <id|name> --city "X" --area "Y" --pin "Z"
+!home where
+!home door add --from 'A' --to 'B'""")
         return
     if cmd == '!build':
         sub = (args.pop(0).lower() if args else '')
@@ -2877,20 +2865,7 @@ def maybe_run_bot(room: str, user: str, msg: str):
             # Alias: !build home -> same as !home build (interactive if no args)
             _bot_emit(room, _home_build(room, user, args))
         else:
-            _bot_emit(room,
-                      "Usage:
-"
-                      "!build world   (interactive)
-"
-                      "!build home    (interactive)
-
-"
-                      "Examples:
-"
-                      "!build world --name \"Ryoko World\" --biome forest-suburbs --style mixed --size large
-"
-                      "!build home --name \"Marble Haven\" --type bungalow --bedrooms 3 --bathrooms 2 --style alien"
-                      )
+            _bot_emit(room, '''Usage:\n!build world   (interactive)\n!build home    (interactive)\n\nExamples:\n!build world --name "Ryoko World" --biome forest-suburbs --style mixed --size large\n!build home --name "Marble Haven" --type bungalow --bedrooms 3 --bathrooms 2 --style alien''')
         return
 
     if cmd == "!map":
