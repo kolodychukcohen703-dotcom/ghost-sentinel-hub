@@ -861,6 +861,11 @@ def _save_world_state(room: str, state: dict | None = None):
 
 
 
+
+# Room membership tracking (for !users per-room, joins/leaves, etc.)
+# room -> set(sid)
+_room_members = defaultdict(set)
+
 def _room_counts():
     return {r: len(sids) for r, sids in _room_members.items() if len(sids) > 0}
 # Presence: sid -> {"sid":..., "name":..., "room":..., "last_seen":...}
