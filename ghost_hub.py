@@ -93,12 +93,36 @@ def _set_selected_home_id(st: dict, user: str, hid: str) -> None:
         st["selected_home_by_user"] = sel
     sel["@" + (user or "guest")] = hid
 
+
 def _get_active_home(st: dict, room: str, user: str) -> tuple[str, dict]:
+    """Return (home_id, home_dict) without KeyError.
+
+    Some older states can reference a default/selected home id that no longer exists.
+    This function self-heals by resetting the default to an existing home, or creating one.
+    """
     hv2 = _st_get_homes_v2(st)
     hid = _get_selected_home_id(st, user) or _st_default_home_id(st)
-    if not hid or hid not in hv2:
+
+    # Missing / stale id? Repair.
+    if (not hid) or (hid not in hv2):
+        # If there is at least one home, pick the first.
+        if hv2:
+            hid = next(iter(hv2.keys()))
+            try:
+                _st_set_default_home_id(st, hid)
+            except Exception:
+                st["default_home_id"] = hid
+        else:
+            hid = _ensure_default_home(st, room, creator=user or "hub")
+            hv2 = _st_get_homes_v2(st)
+
+    # Final fallback: if still missing, create and refresh.
+    if (not hid) or (hid not in hv2):
         hid = _ensure_default_home(st, room, creator=user or "hub")
-    return hid, hv2[hid]
+        hv2 = _st_get_homes_v2(st)
+
+    return hid, hv2.get(hid, {})
+
 
 def _parse_flag(raw: str, flag: str) -> str:
     mm = re.search(r'(?:^|\s)'+re.escape(flag)+r'\s+([^\s].*?)(?=\s+--\w+\b|$)', raw)
