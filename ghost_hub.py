@@ -435,8 +435,8 @@ def _export_world(room: str):
 
 
 # --- Room Logs (Final) ---
-ROOM_LOG_LIMIT = 200
-ROOM_HISTORY_ON_JOIN = 50
+ROOM_LOG_LIMIT = 20000
+ROOM_HISTORY_ON_JOIN = 1500
 
 COMPREHENSIVE_HELP_TEXT = """Ghost Sentinel Hub — Commands
 
@@ -1222,6 +1222,77 @@ HELP_HOME = """🏰 **Home / Fortress Designer — Help + Examples**
 
 # --- Storyline engine (lightweight, room-scoped) ---
 STORY_STATE = {}  # room -> dict(chapter:int, beat:int)
+# --- World Directory (multi-world per room) ---------------------------------
+def _st_get_worlds(st: dict) -> dict:
+    st = st or {}
+    ws = st.get("worlds")
+    if isinstance(ws, dict):
+        return ws
+    return {}
+
+def _st_set_worlds(st: dict, ws: dict):
+    st["worlds"] = ws or {}
+
+def _st_get_active_world_id(st: dict) -> str:
+    return str((st or {}).get("active_world_id") or "").strip()
+
+def _st_set_active_world_id(st: dict, wid: str):
+    st["active_world_id"] = str(wid or "").strip()
+
+def _new_world_id(st: dict) -> str:
+    # stable-ish small id
+    import random, string
+    ws = _st_get_worlds(st)
+    for _ in range(200):
+        wid = "w" + "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+        if wid not in ws:
+            return wid
+    return "w" + str(int(time.time()))
+
+def _find_world_id_by_name(st: dict, name: str) -> str:
+    name = (name or "").strip().lower()
+    if not name:
+        return ""
+    ws = _st_get_worlds(st)
+    for wid, w in ws.items():
+        if str((w or {}).get("name") or "").strip().lower() == name:
+            return wid
+    return ""
+
+def _get_active_world(st: dict) -> tuple[str, dict]:
+    ws = _st_get_worlds(st)
+    wid = _st_get_active_world_id(st)
+    if wid and wid in ws:
+        return wid, ws[wid]
+    # fallback: if single world in legacy location st['world'], migrate it
+    legacy = st.get("world")
+    if isinstance(legacy, dict) and legacy.get("name"):
+        wid = _new_world_id(st)
+        ws[wid] = legacy
+        _st_set_worlds(st, ws)
+        _st_set_active_world_id(st, wid)
+        # keep legacy for compatibility
+        return wid, ws[wid]
+    # fallback: first in dict
+    if ws:
+        wid = next(iter(ws.keys()))
+        _st_set_active_world_id(st, wid)
+        return wid, ws[wid]
+    return "", {}
+
+def _world_list_text(st: dict) -> str:
+    ws = _st_get_worlds(st)
+    aw = _st_get_active_world_id(st)
+    if not ws:
+        return "(no saved worlds yet)"
+    lines = []
+    for wid, w in ws.items():
+        tag = "★" if wid == aw else " "
+        nm = (w or {}).get("name") or wid
+        biome = (w or {}).get("biome") or "—"
+        lines.append(f"{tag} {wid} — {nm} (biome={biome})")
+    return "\n".join(lines)
+
 
 def _story(room: str) -> dict:
     s = STORY_STATE.get(room)
@@ -1827,6 +1898,21 @@ def _home_build(room: str, user: str, args: list):
     hv2[hid] = base
     _st_set_default_home_id(st, hid)
     _set_selected_home_id(st, user or "guest", hid)
+    
+    # Default assignment: attach home to the active world (if any)
+    try:
+        st_room = get_room_state(room) or {}
+        awid, aw = _get_active_world(st_room)
+        if awid:
+            home.setdefault("world_id", awid)
+            loc = home.get("location") or {}
+            # default to world home_city if not set
+            if not loc.get("city") and isinstance(aw, dict) and aw.get("home_city"):
+                loc["city"] = str(aw.get("home_city"))
+            home["location"] = loc
+    except Exception:
+        pass
+
     set_room_state(room, st)
 
     return f"🏠 Built home: {name} ({htype}) • bedrooms:{bedrooms} • baths:{bathrooms} • rooms:{total_rooms} • style:{style} • mood:{mood} • color:{color} • id:{hid}"
@@ -1845,6 +1931,7 @@ def _home_wizard_cancel(room: str, user: str) -> str:
     _HOME_WIZARD.pop(_wizard_key(room, user), None)
     return "🧹 Home Designer cancelled."
 
+
 def _home_wizard_start(room: str, user: str) -> str:
     k = _wizard_key(room, user)
     _HOME_WIZARD[k] = {
@@ -1852,12 +1939,29 @@ def _home_wizard_start(room: str, user: str) -> str:
         "data": {},
         "started_at": utc_ts(),
     }
+    st = get_room_state(room) or {}
+    worlds_txt = _world_list_text(st)
     return (
-        "🏠 **Home Designer (Interactive)**\n"
-        "Answer each step. You can type `cancel` anytime.\n\n"
-        "**Step 1/9 — Name**\n"
+        "🏠 **Home Designer (Interactive)**
+"
+        "Answer each step. You can type `cancel` anytime.
+
+"
+        "🌍 **World assignment**: your home will attach to the **active world** by default.
+"
+        "Use `!world list` / `!world select <id|name>` to change it, or `!home move ...` later.
+
+"
+        "**Saved worlds**
+"
+        f"{worlds_txt}
+
+"
+        "**Step 1/9 — Name**
+"
         "What is the home name/title? (example: `Marble Haven`)"
     )
+
 
 def _home_wizard_prompt(step: str) -> str:
     if step == "type":
@@ -2128,6 +2232,12 @@ def _build_world(room: str, args: list):
     health = round(max(0.0, min(10.0, health_anchor + random.uniform(-1.2, 1.2))), 1)
 
     st = get_room_state(room)
+
+    # Save into world directory
+    ws = _st_get_worlds(st)
+    wid, _ = _get_active_world(st)
+    if not wid:
+        wid = _new_world_id(st)
     st['world'] = {
         'name': name,
         'biome': biome,
@@ -2143,6 +2253,9 @@ def _build_world(room: str, args: list):
         'created_at': utc_ts(),
         'mode': 'build',
     }
+    ws[wid] = st['world']
+    _st_set_worlds(st, ws)
+    _st_set_active_world_id(st, wid)
     set_room_state(room, st)
 
     return (
@@ -2167,15 +2280,31 @@ def _world_wizard_cancel(room: str, user: str) -> str:
     _WORLD_WIZARD.pop(_world_wizard_key(room, user), None)
     return "🧹 World Designer cancelled."
 
+
 def _world_wizard_start(room: str, user: str) -> str:
     k = _world_wizard_key(room, user)
     _WORLD_WIZARD[k] = {"step": "name", "data": {}, "started_at": utc_ts()}
+    st = get_room_state(room) or {}
+    worlds_txt = _world_list_text(st)
     return (
-        "🌍 **World Designer (Interactive)**\n"
-        "Answer each step. Type `cancel` anytime.\n\n"
-        "**Step 1/9 — Name**\n"
+        "🌍 **World Designer (Interactive)**
+"
+        "Answer each step. Type `cancel` anytime.
+
+"
+        "Tip: the world you create becomes the **active world** for this room.
+
+"
+        "**Saved worlds**
+"
+        f"{worlds_txt}
+
+"
+        "**Step 1/9 — Name**
+"
         "What is the world name? (example: `Ryoko World`)"
     )
+
 
 def _world_wizard_prompt(step: str) -> str:
     if step == "biome":
@@ -2301,6 +2430,125 @@ def _world_wizard_handle(room: str, user: str, msg: str) -> str | None:
 
     return None
 
+# --- World/Home assignment helpers ------------------------------------------
+def _cmd_world_list(room: str) -> str:
+    st = get_room_state(room) or {}
+    return "🌍 **Saved Worlds**\n" + _world_list_text(st)
+
+def _cmd_world_select(room: str, args: list) -> str:
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    if not args:
+        wid, w = _get_active_world(st)
+        if wid:
+            return f"★ Active world: {wid} — {w.get('name', wid)}\n\n" + _world_list_text(st)
+        return "No active world yet. Try: `!build world`"
+    target = " ".join(args).strip().strip('"')
+    wid = ""
+    if target in ws:
+        wid = target
+    else:
+        wid = _find_world_id_by_name(st, target)
+    if not wid:
+        return "World not found.\n\n" + _world_list_text(st)
+    _st_set_active_world_id(st, wid)
+    # Keep st['world'] in sync for any legacy code
+    st["world"] = ws.get(wid, st.get("world") or {})
+    set_room_state(room, st)
+    w = ws.get(wid) or {}
+    return f"✅ Active world set: {wid} — {w.get('name', wid)}"
+
+def _cmd_home_where(room: str) -> str:
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    try:
+        hv2 = _st_get_homes_v2(st)
+    except Exception:
+        hv2 = st.get("homes_v2") or {}
+    # use default
+    hid = ""
+    try:
+        hid = _st_default_home_id(st)
+    except Exception:
+        hid = ""
+    home = hv2.get(hid) if hid else (hv2[next(iter(hv2.keys()))] if hv2 else None)
+    if not home:
+        return "No home yet. Try: `!home build`"
+    hwid = home.get("world_id") or _st_get_active_world_id(st)
+    wname = ""
+    if hwid and hwid in ws:
+        wname = ws[hwid].get("name", hwid)
+    loc = home.get("location") or {}
+    city = loc.get("city") or ""
+    area = loc.get("area") or ""
+    pin = loc.get("pin") or ""
+    where = " / ".join([x for x in [city, area, pin] if x])
+    out = [f"🏠 Home: {home.get('name','home')}"]
+    if hwid:
+        out.append(f"🌍 World: {hwid}" + (f" ({wname})" if wname else ""))
+    if where:
+        out.append(f"📍 Location: {where}")
+    if not where and not hwid:
+        out.append("(not assigned yet)")
+    return "\n".join(out)
+
+def _cmd_home_move(room: str, args: list) -> str:
+    # !home move --to_world <id|name> --city "X" --area "Y" --pin "Z"
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    try:
+        hv2 = _st_get_homes_v2(st)
+    except Exception:
+        hv2 = st.get("homes_v2") or {}
+    if not hv2:
+        return "No home yet. Try: `!home build`"
+    try:
+        hid = _st_default_home_id(st)
+    except Exception:
+        hid = next(iter(hv2.keys()))
+    home = hv2.get(hid) or hv2[next(iter(hv2.keys()))]
+
+    # parse flags
+    to_world = _get_flag(args, "--to_world", None) or _get_flag(args, "--world", None) or _get_flag(args, "--to", None)
+    if "--to" in args and not to_world:
+        # allow: --to <world>
+        try:
+            i = args.index("--to")
+            if i+1 < len(args):
+                to_world = args[i+1]
+        except Exception:
+            pass
+    city = _get_flag(args, "--city", None)
+    area = _get_flag(args, "--area", None) or _get_flag(args, "--geo", None) or _get_flag(args, "--region", None)
+    pin = _get_flag(args, "--pin", None) or _get_flag(args, "--pinpoint", None)
+
+    if to_world:
+        target = str(to_world).strip().strip('"')
+        wid = target if target in ws else _find_world_id_by_name(st, target)
+        if not wid:
+            return "World not found.\n\n" + _world_list_text(st)
+        home["world_id"] = wid
+        # also set active world to match
+        _st_set_active_world_id(st, wid)
+        st["world"] = ws.get(wid, st.get("world") or {})
+    else:
+        # default to active world if exists
+        aw = _st_get_active_world_id(st)
+        if aw:
+            home["world_id"] = aw
+
+    loc = home.get("location") or {}
+    if city: loc["city"] = str(city).strip().strip('"')
+    if area: loc["area"] = str(area).strip().strip('"')
+    if pin: loc["pin"] = str(pin).strip().strip('"')
+    home["location"] = loc
+
+    hv2[hid] = home
+    st["homes_v2"] = hv2
+    set_room_state(room, st)
+
+    return _cmd_home_where(room)
+
 
 def _home_add(room: str, args: list):
     if not args:
@@ -2354,47 +2602,95 @@ def _status(room: str):
     )
 
 
+
 def _map(room: str):
-    st = get_room_state(room)
-    w = st.get("world", {})
-    rooms = st.get("home", {}).get("rooms", [])
-    doors = st.get("home", {}).get("doors", [])
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    wid, w = _get_active_world(st)
+
+    # Active home (Phase 7 homes_v2 preferred; fallback to legacy st['home'])
+    hv2 = _st_get_homes_v2(st) if ' _st_get_homes_v2' else (st.get("homes_v2") or {})
+    # Some builds store homes_v2 differently; use helper if present
+    try:
+        hv2 = _st_get_homes_v2(st)
+    except Exception:
+        hv2 = st.get("homes_v2") or {}
+
+    # Choose default home if available
+    home = None
+    try:
+        hid = _st_default_home_id(st)
+        if hid and hid in hv2:
+            home = hv2[hid]
+        elif hv2:
+            home = hv2[next(iter(hv2.keys()))]
+    except Exception:
+        home = None
 
     lines = []
-    lines.append(f"== {room} :: World ==")
-    # World summary (supports both quick-world and build-world)
-    parts = []
-    if w.get('name'): parts.append(str(w.get('name')))
-    if w.get('biome') is not None: parts.append(f"biome={w.get('biome')}")
-    if w.get('style') is not None: parts.append(f"style={w.get('style')}")
-    if w.get('size') is not None: parts.append(f"size={w.get('size')}")
-    if w.get('magic') is not None: parts.append(f"magic={w.get('magic')}")
-    if w.get('factions') is not None: parts.append(f"factions={w.get('factions')}")
-    if w.get('population') is not None:
-        try: parts.append(f"pop={int(w.get('population')):,}")
-        except Exception: parts.append(f"pop={w.get('population')}")
-    if w.get('home_city') is not None: parts.append(f"home-city={w.get('home_city')}")
-    if w.get('weather') is not None: parts.append(f"weather={w.get('weather')}")
-    if w.get('mood') is not None: parts.append(f"mood={w.get('mood')}")
-    if w.get('age_billion_years') is not None: parts.append(f"age={w.get('age_billion_years')}b yrs")
-    if w.get('health_of_planet') is not None: parts.append(f"planet-health={w.get('health_of_planet')}/10")
-    lines.append(' | '.join(parts) if parts else '(no world yet)  try: !build world --name "My World" --biome forest --style new-age --size large --home city "Turnpoint"')
-    lines.append("")
-    lines.append("== Home Rooms ==")
-    if not rooms:
-        lines.append('(no rooms yet)  try: !home add "Marble Foyer" --style gothic --size large')
+    lines.append(f"== {room} :: Map ==")
+
+    if wid and w:
+        lines.append("== Active World ==")
+        lines.append(f"{wid} — {w.get('name', room.lstrip('#'))}")
+        lines.append(f"biome={w.get('biome','—')} | style={w.get('style','—')} | size={w.get('size','—')}")
+        pop = w.get("population")
+        if pop is not None:
+            try:
+                pop_txt = f"{int(pop):,}"
+            except Exception:
+                pop_txt = str(pop)
+        else:
+            pop_txt = "—"
+        lines.append(f"population={pop_txt} | factions={w.get('factions','—')} | health={w.get('health_of_planet','—')}/10")
+        lines.append(f"home_city={w.get('home_city','—')} | weather={w.get('weather','—')} | mood={w.get('mood','—')}")
     else:
-        for r in rooms[:60]:
-            lines.append(f"- {r.get('name')} (style={r.get('style')}, size={r.get('size')})")
+        lines.append("== Active World ==")
+        lines.append("(none yet)  → Try: `!build world`")
 
     lines.append("")
-    lines.append("== Doors ==")
-    if not doors:
-        lines.append('(no doors yet)  try: !home door add --from "Marble Foyer" --to "Library"')
-    else:
-        for d in doors[:120]:
-            lines.append(f"* {d.get('from')}  ->  {d.get('to')}")
+    lines.append("== Saved Worlds ==")
+    lines.append(_world_list_text(st))
+    lines.append("")
 
+    if home:
+        lines.append("== Active Home ==")
+        lines.append(_home_v2_display(home) if ' _home_v2_display' else str(home.get("name","home")))
+        loc = home.get("location") or {}
+        hwid = home.get("world_id") or wid
+        if hwid and hwid in ws:
+            lines.append(f"assigned_world={hwid} ({ws[hwid].get('name', hwid)})")
+        elif hwid:
+            lines.append(f"assigned_world={hwid}")
+        if loc:
+            city = loc.get("city") or ""
+            area = loc.get("area") or ""
+            pin = loc.get("pin") or ""
+            where = " / ".join([x for x in [city, area, pin] if x])
+            if where:
+                lines.append(f"location={where}")
+        rooms = home.get("rooms") or []
+        doors = home.get("doors") or []
+        if rooms:
+            lines.append("")
+            lines.append("== Rooms ==")
+            for r in rooms[:40]:
+                lines.append("- " + str(r.get("name","(room)")))
+            if len(rooms) > 40:
+                lines.append(f"... +{len(rooms)-40} more")
+        if doors:
+            lines.append("")
+            lines.append("== Doors ==")
+            for d in doors[:40]:
+                lines.append(f"- {d.get('from','?')} → {d.get('to','?')}")
+            if len(doors) > 40:
+                lines.append(f"... +{len(doors)-40} more")
+    else:
+        lines.append("== Active Home ==")
+        lines.append("(none yet)  → Try: `!home build` or `!home create`")
+
+    lines.append("")
+    lines.append("Tips: `!world list`, `!world select <id|name>`, `!home move --to_world <id|name> --city "X" --area "Y" --pin "Z"`")
     return "\n".join(lines)
 
 
@@ -2542,8 +2838,18 @@ def maybe_run_bot(room: str, user: str, msg: str):
         sub = (args.pop(0).lower() if args else "")
         if sub == "create":
             _bot_emit(room, _world_create(room, args))
+        elif sub in {"list", "ls"}:
+            _bot_emit(room, _cmd_world_list(room))
+        elif sub in {"select", "use"}:
+            _bot_emit(room, _cmd_world_select(room, args))
         else:
-            _bot_emit(room, 'Usage: !world create --biome <name> --magic <low|med|high> --factions <N> [--name "World Name"]')
+            _bot_emit(room, "Usage:
+"
+                           "!world create <name>
+"
+                           "!world list
+"
+                           "!world select <id|name>")
         return
     if cmd == "!home":
         sub = (args.pop(0).lower() if args else "")
@@ -2551,6 +2857,10 @@ def maybe_run_bot(room: str, user: str, msg: str):
             _bot_emit(room, _home_add(room, args))
         elif sub == "build":
             _bot_emit(room, _home_build(room, user, args))
+        elif sub == "move":
+            _bot_emit(room, _cmd_home_move(room, args))
+        elif sub in {"where", "loc", "location"}:
+            _bot_emit(room, _cmd_home_where(room))
         elif sub == "door":
             sub2 = (args.pop(0).lower() if args else "")
             if sub2 == "add":
@@ -2558,7 +2868,17 @@ def maybe_run_bot(room: str, user: str, msg: str):
             else:
                 _bot_emit(room, 'Usage: !home door add --from "Room A" --to "Room B"')
         else:
-            _bot_emit(room, 'Usage: !home add "Room Name" ... OR !home build --name "Title" --type bungalow --bedrooms 3 --bathrooms 2 --style alien --kitchen 1 --total_rooms 8 --mood calm --color_sheen "blue white"  OR !home door add --from ... --to ...')
+            _bot_emit(room, "Usage:
+"
+                           "!home build (interactive)
+"
+                           "!home build --format
+"
+                           "!home move --to_world <id|name> --city "X" --area "Y" --pin "Z"
+"
+                           "!home where
+"
+                           "!home door add --from "A" --to "B"")
         return
     if cmd == '!build':
         sub = (args.pop(0).lower() if args else '')
@@ -2568,8 +2888,24 @@ def maybe_run_bot(room: str, user: str, msg: str):
                 _bot_emit(room, _world_wizard_start(room, user))
             else:
                 _bot_emit(room, _build_world(room, args))
+        elif sub == 'home':
+            # Alias: !build home -> same as !home build (interactive if no args)
+            _bot_emit(room, _home_build(room, user, args))
         else:
-            _bot_emit(room, 'Usage: !build world --name "World Name" --biome forest --style mixed --size large --population "30000" --home city "Turnpoint" --weather seasonal --mood enlightened --age_of_world "3.4" --health_of_planet "7.5/10"')
+            _bot_emit(room,
+                      "Usage:
+"
+                      "!build world   (interactive)
+"
+                      "!build home    (interactive)
+
+"
+                      "Examples:
+"
+                      "!build world --name \"Ryoko World\" --biome forest-suburbs --style mixed --size large
+"
+                      "!build home --name \"Marble Haven\" --type bungalow --bedrooms 3 --bathrooms 2 --style alien"
+                      )
         return
 
     if cmd == "!map":
@@ -2788,13 +3124,10 @@ def on_join(data):
         }
 
     # Send history for active room only (client can still receive broadcast from all joined rooms)
-    emit("chat_history", {"room": active, "items": list(_room_history[active])})
+    emit("chat_history", {"room": active, "items": _get_room_history(active, ROOM_HISTORY_ON_JOIN)})
 
     _emit_user_list()
-
-    notice = {"room": active, "sender": "hub", "msg": f"{user} joined {active}", "ts": utc_ts()}
-    _room_history[active].append(notice)
-    emit("chat_message", notice, to=active)
+    _emit_chat(active, active, "hub", f"{user} joined {active}")
 
     # Hint only once per session (to lobby)
     hint = {"room": MAIN_ROOM, "sender": BOT_NAME, "msg": "Try: /list, /join #witness-hall, /join #terminal, /part #room. You can stay in multiple rooms.", "ts": utc_ts()}
