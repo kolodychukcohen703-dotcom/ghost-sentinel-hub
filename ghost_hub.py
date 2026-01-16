@@ -1941,25 +1941,17 @@ def _home_wizard_start(room: str, user: str) -> str:
     }
     st = get_room_state(room) or {}
     worlds_txt = _world_list_text(st)
-    return (
-        "🏠 **Home Designer (Interactive)**
-"
-        "Answer each step. You can type `cancel` anytime.
+    return ("""
+🏠 **Home Designer (Interactive)**
+Answer each step. You can type `cancel` anytime.
 
-"
-        "🌍 **World assignment**: your home will attach to the **active world** by default.
-"
-        "Use `!world list` / `!world select <id|name>` to change it, or `!home move ...` later.
+🌍 **World assignment**: your home will attach to the **active world** by default.
+Use `!world list` / `!world select <id|name>` to change it, or `!home move ...` later.
 
+**Step 1/9 — Name**
+What is the home name/title? (example: `Marble Haven`)
+""")
 "
-        "**Saved worlds**
-"
-        f"{worlds_txt}
-
-"
-        "**Step 1/9 — Name**
-"
-        "What is the home name/title? (example: `Marble Haven`)"
     )
 
 
@@ -2286,23 +2278,16 @@ def _world_wizard_start(room: str, user: str) -> str:
     _WORLD_WIZARD[k] = {"step": "name", "data": {}, "started_at": utc_ts()}
     st = get_room_state(room) or {}
     worlds_txt = _world_list_text(st)
-    return (
-        "🌍 **World Designer (Interactive)**
-"
-        "Answer each step. Type `cancel` anytime.
+    return ("""
+🌍 **World Designer (Interactive)**
+Answer each step. Type `cancel` anytime.
 
-"
-        "Tip: the world you create becomes the **active world** for this room.
+Tip: the world you create becomes the **active world** for this room.
 
+**Step 1/9 — Name**
+What is the world name? (example: `Ryoko World`)
+""")
 "
-        "**Saved worlds**
-"
-        f"{worlds_txt}
-
-"
-        "**Step 1/9 — Name**
-"
-        "What is the world name? (example: `Ryoko World`)"
     )
 
 
