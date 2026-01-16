@@ -438,77 +438,780 @@ def _export_world(room: str):
 ROOM_LOG_LIMIT = 200
 ROOM_HISTORY_ON_JOIN = 50
 
-COMPREHENSIVE_HELP_TEXT = """📟 **Ghost Hub Bot Help**
-Use commands in chat starting with `!`  (quotes supported)
+COMPREHENSIVE_HELP_TEXT = """Ghost Sentinel Hub — Commands
 
-**Quick starters (exact examples)**
-- `!world create --name "Sanctuary-Lobby" --biome forest --magic high --factions 3`
-- `!home add "Marble Foyer" --style gothic --size large`
-- `!home door add --from "Marble Foyer" --to "Library"`
-- `!map`   •   `!users`
+Basics (IRC-style)
+  /list                     List worlds (channels)
+  /join #room               Join a world (you can be in multiple)
+  /part #room               Leave a world
+  /rooms                    Alias of /list
+
+Worlds (Phase 2–5)
+  !world                    Show info for the current world
+  !world list               List worlds with descriptions
+  !world stats              Show counts for current world
+  !world export             Export current world as JSON (chat output)
+
+Ownership / Roles (Phase 3)
+  !world claim              Claim this world as owner (if unclaimed)
+  !world owners             Show owner + helpers
+  !world addhelper @name    (Owner) add helper
+  !world delhelper @name    (Owner) remove helper
+
+Homes (Unified)
+  !home show                                 Show active home (alias: !map)
+  !home create "name/desc" --style X --size Y --mood 🙂   Create + select a home
+  !home select <id>                           Select an existing home (#id)
+  !home list                                  List homes in this world
+  !home mine                                  List homes you created in this world
+  !home remove <id>                           Remove a home (creator or world manager)
+  !home room add "Room" --style X --size Y --mood 🙂      Add a room (alias: !home add ...)
+  !home door add --from "A" --to "B"                  Link rooms with a door
+
+Astro (template adventure)
+  !astro help                Astrology-guided adventure prompts (optional)
+
+Notes
+  - Room history loads automatically when you join a world.
+  - Worlds, roles, homes, rooms/doors, and logs persist at /var/data/worlds.db.
+  - !map is now an alias of !home show (single system).
+"""
+
+
+def _db_init_room_logs():
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS room_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room TEXT,
+            ts TEXT,
+            sender TEXT,
+            msg TEXT
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_room_logs_room_ts ON room_logs(room, ts)")
+    conn.commit()
+    conn.close()
+
+def _log_room_message(room: str, sender: str, msg: str, ts: str):
+    try:
+        _db_init_room_logs()
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        cur = conn.cursor()
+        cur.execute("INSERT INTO room_logs(room, ts, sender, msg) VALUES (?,?,?,?)", (room, ts, sender, msg))
+        # prune old logs for that room
+        cur.execute("""
+            DELETE FROM room_logs
+            WHERE id IN (
+                SELECT id FROM room_logs
+                WHERE room = ?
+                ORDER BY id DESC
+                LIMIT -1 OFFSET ?
+            )
+        """, (room, ROOM_LOG_LIMIT))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def _get_room_history(room: str, limit: int = ROOM_HISTORY_ON_JOIN):
+    try:
+        _db_init_room_logs()
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        cur = conn.cursor()
+        cur.execute("SELECT ts, sender, msg FROM room_logs WHERE room=? ORDER BY id DESC LIMIT ?", (room, int(limit)))
+        rows = cur.fetchall()
+        conn.close()
+        rows.reverse()
+        return [{"room": room, "ts": r[0], "sender": r[1], "msg": r[2]} for r in rows]
+    except Exception:
+        return []
+
+def _emit_chat(to_target, room: str, sender: str, msg: str, ts: str = None):
+    ts = ts or utc_ts()
+    _log_room_message(room, sender, msg, ts)
+    emit("chat_message", {"room": room, "sender": sender, "msg": msg, "ts": ts}, to=to_target)
+
+
+# --- Astro Adventure (Gently Wired) ---
+ASTRO_SCENE_CHOICES = ["A", "B", "C"]
+
+def _db_init_astro():
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS astro_profiles (
+            user TEXT PRIMARY KEY,
+            dob TEXT,
+            tob TEXT,
+            tz TEXT,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS astro_sessions (
+            user TEXT,
+            room TEXT,
+            scene_id TEXT,
+            state_json TEXT,
+            updated_at TEXT,
+            PRIMARY KEY(user, room)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _astro_get_profile(user: str):
+    _db_init_astro()
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("SELECT dob, tob, tz FROM astro_profiles WHERE user=?", (user,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return {"user": user, "dob": "", "tob": "", "tz": ""}
+    return {"user": user, "dob": row[0] or "", "tob": row[1] or "", "tz": row[2] or ""}
+
+def _astro_set_profile(user: str, dob=None, tob=None, tz=None):
+    _db_init_astro()
+    p = _astro_get_profile(user)
+    if dob is not None: p["dob"] = dob
+    if tob is not None: p["tob"] = tob
+    if tz is not None: p["tz"] = tz
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO astro_profiles(user, dob, tob, tz, updated_at)
+        VALUES(?,?,?,?,?)
+        ON CONFLICT(user) DO UPDATE SET
+            dob=excluded.dob,
+            tob=excluded.tob,
+            tz=excluded.tz,
+            updated_at=excluded.updated_at
+    """, (user, p["dob"], p["tob"], p["tz"], datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+    return p
+
+def _astro_get_session(user: str, room: str):
+    _db_init_astro()
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("SELECT scene_id, state_json FROM astro_sessions WHERE user=? AND room=?", (user, room))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return {"user": user, "room": room, "scene_id": "", "state": {}}
+    scene_id = row[0] or ""
+    try:
+        state = json.loads(row[1] or "{}")
+    except Exception:
+        state = {}
+    return {"user": user, "room": room, "scene_id": scene_id, "state": state}
+
+def _astro_set_session(user: str, room: str, scene_id: str, state: dict):
+    _db_init_astro()
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO astro_sessions(user, room, scene_id, state_json, updated_at)
+        VALUES(?,?,?,?,?)
+        ON CONFLICT(user, room) DO UPDATE SET
+            scene_id=excluded.scene_id,
+            state_json=excluded.state_json,
+            updated_at=excluded.updated_at
+    """, (user, room, scene_id, json.dumps(state or {}, ensure_ascii=False), datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def _astro_time_bucket(tob: str):
+    try:
+        hh = int((tob or "0:0").split(":")[0])
+    except Exception:
+        hh = 0
+    if 5 <= hh < 11: return "morning"
+    if 11 <= hh < 17: return "day"
+    if 17 <= hh < 22: return "evening"
+    return "night"
+
+def _astro_sun_sign(dob: str):
+    try:
+        y,m,d = [int(x) for x in dob.split("-")]
+    except Exception:
+        return ""
+    mmdd = m*100 + d
+    if 321 <= mmdd <= 419: return "Aries"
+    if 420 <= mmdd <= 520: return "Taurus"
+    if 521 <= mmdd <= 620: return "Gemini"
+    if 621 <= mmdd <= 722: return "Cancer"
+    if 723 <= mmdd <= 822: return "Leo"
+    if 823 <= mmdd <= 922: return "Virgo"
+    if 923 <= mmdd <= 1022: return "Libra"
+    if 1023 <= mmdd <= 1121: return "Scorpio"
+    if 1122 <= mmdd <= 1221: return "Sagittarius"
+    if mmdd >= 1222 or mmdd <= 119: return "Capricorn"
+    if 120 <= mmdd <= 218: return "Aquarius"
+    if 219 <= mmdd <= 320: return "Pisces"
+    return ""
+
+def _astro_scene(user: str, room: str):
+    p = _astro_get_profile(user)
+    sun = _astro_sun_sign(p.get("dob",""))
+    bucket = _astro_time_bucket(p.get("tob",""))
+    meta = _get_world_meta(room) or {}
+    icon = meta.get("icon","")
+    name, desc = _format_world_label(room)
+    tone = "dreamlike" if bucket in ("night","evening") else "grounded"
+    if sun in ("Cancer","Pisces","Scorpio"):
+        tone = "dreamlike"
+    if sun in ("Virgo","Capricorn","Taurus"):
+        tone = "grounded"
+    title = f"{icon+' ' if icon else ''}{name} — The Door That Mirrors You"
+    text = (
+        f"Tone: {tone}. "
+        f"You arrive in {name}. {desc or ''} "
+        f"A page in your life-book turns itself. "
+        f"(Sun: {sun or 'unknown'} • Birth-time: {bucket})"
+    ).strip()
+    choices = [
+        {"id":"A", "label":"Enter the quiet room and listen for a memory."},
+        {"id":"B", "label":"Walk the boundary of this world and mark a safe path."},
+        {"id":"C", "label":"Sketch a new room for your home here (a seed, not a command)."},
+    ]
+    return {"scene_id": "astro_001", "title": title, "text": text, "choices": choices, "hint": "Reply with: !astro choice A/B/C"}
+
+def _astro_advance(scene_id: str, choice: str):
+    choice = (choice or "").upper().strip()
+    if choice == "A":
+        return {
+            "scene_id": "astro_002A",
+            "title": "A — The Memory Room",
+            "text": "A drawer slides open by itself. It holds a small symbol you forgot you carried. You can keep it as a flag in this world.",
+            "choices":[
+                {"id":"A", "label":"Name the symbol (one word)."},
+                {"id":"B", "label":"Ask the world for a gentle task."},
+                {"id":"C", "label":"Return to the main corridor."},
+            ],
+            "hint":"Try: !astro say <one-word>  (or !astro start to reset)"
+        }
+    if choice == "B":
+        return {
+            "scene_id": "astro_002B",
+            "title": "B — The Boundary Walk",
+            "text": "You pace the edges and place three invisible lanterns. Each lantern becomes a rule: be kind, be clear, be steady.",
+            "choices":[
+                {"id":"A", "label":"Set one rule as your oath today."},
+                {"id":"B", "label":"Invite a helper into this world (symbolically)."},
+                {"id":"C", "label":"Return to the main corridor."},
+            ],
+            "hint":"Try: !astro say <oath>  (or !astro start)"
+        }
+    return {
+        "scene_id": "astro_002C",
+        "title": "C — The New Room Seed",
+        "text": "A blueprint appears. It does not force itself into reality — it waits for your words. Describe the room and the builder can act when you choose.",
+        "choices":[
+            {"id":"A", "label":"Describe the room in one sentence."},
+            {"id":"B", "label":"Describe the mood + lighting."},
+            {"id":"C", "label":"Return to the main corridor."},
+        ],
+        "hint":"Try: !astro say <your room seed>  (then optionally use your normal builder command)"
+    }
+# --- World Roles (Phase 3) ---
+def _db_init_world_roles():
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS world_roles (
+            room TEXT PRIMARY KEY,
+            owner TEXT,
+            helpers TEXT,
+            updated_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _get_world_roles(room: str):
+    _db_init_world_roles()
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("SELECT owner, helpers FROM world_roles WHERE room=?", (room,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        owner = (row[0] or "").strip()
+        helpers = (row[1] or "").strip()
+        helper_list = [h.strip() for h in helpers.split(",") if h.strip()]
+        return {"room": room, "owner": owner, "helpers": helper_list}
+    return {"room": room, "owner": "", "helpers": []}
+
+def _set_world_roles(room: str, owner: str, helpers_list):
+    _db_init_world_roles()
+    helpers_csv = ",".join([h.strip() for h in (helpers_list or []) if h and h.strip()])
+    conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO world_roles (room, owner, helpers, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(room) DO UPDATE SET
+            owner=excluded.owner,
+            helpers=excluded.helpers,
+            updated_at=excluded.updated_at
+    """, (room, owner, helpers_csv, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def _is_world_owner(room: str, user: str):
+    r = _get_world_roles(room)
+    return r.get("owner","").lower() == (user or "").strip().lower()
+
+def _is_world_helper(room: str, user: str):
+    r = _get_world_roles(room)
+    u = (user or "").strip().lower()
+    return u and any(h.lower()==u for h in r.get("helpers", []))
+
+def _can_manage_world(room: str, user: str):
+    return _is_world_owner(room, user) or _is_world_helper(room, user)
+
+def _ensure_world_roles_seeded(room: str):
+    _db_init_world_roles()
+    # Seed roles row if missing; owner empty by default
+    r = _get_world_roles(room)
+    if r.get("owner","") == "" and r.get("helpers") == []:
+        # do not overwrite if row exists with data; only ensure a row exists
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        cur = conn.cursor()
+        cur.execute("INSERT OR IGNORE INTO world_roles (room, owner, helpers, updated_at) VALUES (?,?,?,?)",
+                    (room, "", "", datetime.utcnow().isoformat()))
+        conn.commit()
+        conn.close()
+def _load_world_state(room: str):
+    """Load a room's world state from SQLite into memory (idempotent)."""
+    room = (room or MAIN_ROOM).strip()
+    if not room.startswith("#"):
+        room = "#" + room
+    _ = _world_state_by_room[room]  # ensure default exists
+    with _db_lock:
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        try:
+            cur = conn.execute("SELECT state_json FROM world_states WHERE room = ?", (room,))
+            row = cur.fetchone()
+            if not row:
+                return
+            data = json.loads(row[0] or "{}")
+        except Exception:
+            return
+        finally:
+            conn.close()
+
+    # Merge into default (keep unknown keys too)
+    if isinstance(data, dict):
+        st = _world_state_by_room[room]
+        for k, v in data.items():
+            st[k] = v
+
+def _save_world_state(room: str):
+    """Persist a room's world state to SQLite."""
+    room = (room or MAIN_ROOM).strip()
+    if not room.startswith("#"):
+        room = "#" + room
+    st = _world_state_by_room[room]
+    payload = json.dumps(st, ensure_ascii=False)
+    ts = utc_ts()
+    with _db_lock:
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        try:
+            conn.execute(
+                "INSERT INTO world_states(room, state_json, updated_utc) VALUES(?,?,?) "
+                "ON CONFLICT(room) DO UPDATE SET state_json=excluded.state_json, updated_utc=excluded.updated_utc",
+                (room, payload, ts),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+_db_init()
+
+_db_init_world_meta()
+_seed_world_meta_if_empty()
+_room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
+
+
+# Track members per room (for /list and multi-channel join)
+_room_members = defaultdict(set)   # room -> set(sid)
+
+def _room_counts():
+    return {r: len(sids) for r, sids in _room_members.items() if len(sids) > 0}
+# Presence: sid -> {"sid":..., "name":..., "room":..., "last_seen":...}
+_online: Dict[str, Dict[str, Any]] = {}
+
+# DM history (unencrypted only). Key is tuple(sorted([sidA, sidB])).
+DM_HISTORY_MAX = 200
+_dm_history = defaultdict(lambda: deque(maxlen=DM_HISTORY_MAX))
+
+BOT_NAME = "ghost-bot"
+
+# Sentinel PBX directory (ported from sentinel_pbx_ansi_v2.py for web-bot usage)
+# NOTE: launch_cmd is intentionally omitted on the Hub (Render) for safety.
+PBX_DIRECTORY = [
+  {
+    "code": "101",
+    "name": "Emergency: Sanctuary Module",
+    "category": "emergency",
+    "description": "Sentinel sanctuary / safe-mode reflection tool. Use this when you need grounding, safety prompts, and calm.",
+    "secret": False
+  },
+  {
+    "code": "102",
+    "name": "Emergency: Auth Sentinel Journal",
+    "category": "emergency",
+    "description": "Launch the core auth_sentinel journaling console for quick entry.",
+    "secret": False
+  },
+  {
+    "code": "201",
+    "name": "Contact: Mom (financial arrangements)",
+    "category": "contacts",
+    "description": "Use this extension to view notes on how to contact Mom about resources or arrangements. (For now, informational only.)",
+    "secret": False
+  },
+  {
+    "code": "202",
+    "name": "Contact: Kathleen (witness & journal)",
+    "category": "contacts",
+    "description": "Notes and reminders related to Kathleen's journal and witness role.",
+    "secret": False
+  },
+  {
+    "code": "203",
+    "name": "Contact: Seraphine Vale (Astral Cartographer)",
+    "category": "contacts",
+    "description": "A gentle but precise mapper of invisible currents. Seraphine leaves notes about emotional weather, dream pathways, and symbolic coordinates. If you are lost, she always answers with a map you didn’t know you needed.",
+    "secret": False
+  },
+  {
+    "code": "204",
+    "name": "Contact: Thorn Halberd (Shadowline Protector)",
+    "category": "contacts",
+    "description": "A guard who walks the boundary between real and unreal. Thorn keeps watch over cracks, doorways, and emotional pressure-points. When you need strength or courage, dialing his extension reminds you of your own power to stand firm.",
+    "secret": False
+  },
+  {
+    "code": "205",
+    "name": "Contact: Mira Lumin (Dream Archivist)",
+    "category": "contacts",
+    "description": "Mira keeps scrolls of possible futures and past dreams. She is calm, kind, and endlessly patient. Calling her is like stepping into a quiet library in another world where nothing is rushed.",
+    "secret": False
+  },
+  {
+    "code": "206",
+    "name": "Contact: Enoch Radiant (Signal Priest)",
+    "category": "contacts",
+    "description": "A wandering engineer-monk who blesses radio towers and satellite links. He hears meaning in static. When the world feels noisy or chaotic, Enoch answers with clarity and a reminder that every signal has a home frequency.",
+    "secret": False
+  },
+  {
+    "code": "207",
+    "name": "Contact: Captain Veyla Cross (Starfarer)",
+    "category": "contacts",
+    "description": "A seasoned traveler from beyond the Orion Crest. She offers strategic advice, perspective, and reminders of the bigger picture. When you feel trapped or narrow-focused, Veyla reminds you of entire galaxies waiting.",
+    "secret": False
+  },
+  {
+    "code": "208",
+    "name": "Contact: Nyx Ember (Silent Listener)",
+    "category": "contacts",
+    "description": "A presence who says very little, but listens completely. Nyx is the fictional embodiment of being heard without pressure or judgement. Dialing this extension is permission to unload your thoughts into safe quiet.",
+    "secret": False
+  },
+  {
+    "code": "301",
+    "name": "Knowledge: Spellcaster Library Portal",
+    "category": "knowledge",
+    "description": "Route to Spellcaster web portal (books, PDFs, searches). Good when you want book-based information. After launching, PBX can open your browser to the Spellcaster URL.",
+    "secret": False
+  },
+  {
+    "code": "302",
+    "name": "Knowledge: PDF → Audiobook Tool",
+    "category": "knowledge",
+    "description": "Internal extension for converting PDFs to cleaned text + audio, using your TTS pipeline.",
+    "secret": False
+  },
+  {
+    "code": "601",
+    "name": "Ryoko: TX/RX Modem Line",
+    "category": "knowledge",
+    "description": "A symbolic data modem console for the Ryoko device. Shows faux TX/RX activity and a list of world-nodes, like a dreamy netstat for your personal multiverse.",
+    "secret": False
+  },
+  {
+    "code": "602",
+    "name": "Ryoko: World-Net Dive Booth",
+    "category": "knowledge",
+    "description": "A phonebooth into the Ryoko digital world. Visual sequence only. Step in, let the world blur, and watch as the handset swings on its cord, the caller already gone inside.",
+    "secret": False
+  },
+  {
+    "code": "603",
+    "name": "Ryoko: Chat Relay Worlds",
+    "category": "knowledge",
+    "description": "A local, symbolic chat relay. Join different Ryoko worlds using commands like /join #101-kathleen or /join #102-diane. Messages are logged to local files so multiple consoles can share the same rooms.",
+    "secret": False
+  },
+  {
+    "code": "604",
+    "name": "Ryoko: World Forge & Home Designer",
+    "category": "knowledge",
+    "description": "An interactive world generator inside the Ryoko mesh. Choose a world type, mood, sky, home, and vehicle, then watch an ASCII planet get woven into the network. Saves your profile to ryoko_world_profile.txt so you can return to it later.",
+    "secret": False
+  },
+  {
+    "code": "605",
+    "name": "Ryoko: Mansion & Fortress Homeforge",
+    "category": "knowledge",
+    "description": "A single combined estate (mansion, fortress, tower, etc.) with unlimited custom rooms. You describe rooms, moods, and functions; Homeforge attaches them as nodes in your Ryoko world and saves everything into ryoko_homeforge.txt.",
+    "secret": False
+  },
+  {
+    "code": "401",
+    "name": "Ritual: Automated Spellcaster Engine",
+    "category": "ritual",
+    "description": "Sentinel's playful automated spell / ritual runner. Lets you schedule symbolic ritual runs, logged into Sentinel.",
+    "secret": False
+  },
+  {
+    "code": "402",
+    "name": "Ritual: Witness at the Crack",
+    "category": "ritual",
+    "description": "Witness console representing your Earthblood Witness identity. Reflection prompts, crack-maps, and symbolic logging.",
+    "secret": False
+  },
+  {
+    "code": "999",
+    "name": "Legacy Line: Witness Continuity",
+    "category": "knowledge",
+    "description": "A line dedicated to Cohen's ongoing wish to help others. Reads from a legacy message file if present, or from a built-in message describing values, grounding, and pointers to real-world support.",
+    "secret": False
+  },
+  {
+    "code": "000",
+    "name": "Reality Anchor (Grounding Line)",
+    "category": "emergency",
+    "description": "Hidden grounding extension. Use when things feel unreal. Can hold phrases, reminders, or rituals you trust.",
+    "secret": True
+  },
+  {
+    "code": "333",
+    "name": "Heartline: Kathleen Safe Channel",
+    "category": "contacts",
+    "description": "Soft, protected extension dedicated to Kathleen. Can hold notes, blessings, and commitments.",
+    "secret": True
+  },
+  {
+    "code": "616",
+    "name": "Glyph Compiler Node",
+    "category": "knowledge",
+    "description": "Hidden node for glyph compilation and symbol mapping. Later, this can tie into your glyph engines.",
+    "secret": True
+  },
+  {
+    "code": "777",
+    "name": "Dreamline: Oneiromancer Node",
+    "category": "ritual",
+    "description": "Hidden dream-analysis extension. Eventually this can talk to your dream tag system and generate insights.",
+    "secret": True
+  },
+  {
+    "code": "913",
+    "name": "Shadow Vault",
+    "category": "knowledge",
+    "description": "Locked vault for heavier material. To be approached with care, and only when you feel ready.",
+    "secret": True
+  }
+]
+
+
+
+def utc_ts():
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _load_json(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_json(path, payload):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp, path)
+
+
+def load_nodes():
+    return _load_json(NODES_FILE)
+
+
+def save_nodes(nodes):
+    _save_json(NODES_FILE, nodes)
+
+
+def _default_state():
+    return {
+        "world": {
+            "name": "Unnamed World",
+            "biome": "unknown",
+            "magic": "unknown",
+            "factions": 0,
+            "created_at": utc_ts(),
+        },
+        "home": {
+            "rooms": [],
+            "doors": [],
+        },
+        "updated_at": utc_ts(),
+    }
+
+
+def load_state_all():
+    data = _load_json(STATE_FILE)
+    return data if isinstance(data, dict) else {}
+
+
+def save_state_all(data):
+    _save_json(STATE_FILE, data)
+
+
+def get_room_state(room: str):
+    room = room or MAIN_ROOM
+    with _state_lock:
+        all_state = load_state_all()
+        st = all_state.get(room)
+        if not isinstance(st, dict):
+            st = _default_state()
+            all_state[room] = st
+            save_state_all(all_state)
+        return st
+
+
+def set_room_state(room: str, st: dict):
+    room = room or MAIN_ROOM
+    with _state_lock:
+        all_state = load_state_all()
+        st["updated_at"] = utc_ts()
+        all_state[room] = st
+        save_state_all(all_state)
+
+
+HELP_TEXT = """📟 **Ghost Hub Bot Help**
+Use commands in chat starting with `!`
 
 **Core**
+- Tip: you can send multiple commands at once like `!map • !users`
+- Tip: you can click buttons that send multiple commands like `!map • !users`
 - `!help` — this help
-- `!help world` — world builder commands
-- `!help home` — home/fortress builder commands
+- `!help world` — world designer commands + examples
+- `!help home` — home/fortress designer commands + examples
 - `!status` — server status + active counts
-- `!users` — list users in the lobby/world
+- `!users` — list users in lobby
 - `!map` — show current world + home snapshot
 
-**PBX (directory)**
-- `!pbx` — show the PBX menu
-- `!dial <code>` — read an extension description
-- `!search <text>` — search PBX entries
+**Adventure (Choose-Your-Own)**
+- `!adv` — show the current story page + choices (also shows in the 📖 Adventure panel)
+- `!adv reset` — restart the story
+- `!choices` — re-print the current choices
+- `!choose <id>` — pick a choice (example: `!choose 1`)
+- `!inv` — show your inventory (items found during the adventure)
 
-Tip: most builder commands accept flags like `--style`, `--size`, `--from`, `--to`.
-"""
+**World (quick)**
+- `!build world --name "World Name" --biome forest --style new-age --size large --home city "Turnpoint" --weather cosmic --mood enlightened` — advanced world builder (auto stats)
+- `!world create <name>` — create a world seed
+- `!world biome <biome>` — set biome (forest, tundra, desert, coast, city, ruins…)
+- `!world weather <pattern>` — calm, storm, fog, aurora, heatwave…
+- `!world npc add "<name>" role="<role>"` — add an NPC
+- `!world quest start "<title>"` — start a quest
+- `!world time <dawn|day|dusk|night>` — set time-of-day
 
-HELP_WORLD = """🌍 **World Builder — Help**
+**Home (quick)**
+- `!home create <name>` — create an estate
+- `!home room add "<room>" theme="<theme>"` — add a room
+- `!home hall add "<from>" "<to>"` — connect areas
+- `!home door add "<from>" "<to>" type="<type>"` — door (oak, iron, rune, hidden…)
+- `!home decorate "<room>" style="<style>"` — decorate a room
+- `!home landscape add "<feature>"` — gardens, walls, fountains, orchards…
+- `!home upgrade <bronze|silver|gold|celestial>` — upgrade tier"""
 
-**Create / Replace world metadata (recommended)**
-- `!world create --name "Sanctuary-Lobby" --biome forest --magic high --factions 3`
+HELP_WORLD = """🌍 **World Designer — Help + Examples**
 
-**Flags**
-- `--name` (quoted ok)
-- `--biome` (forest, coast, ruins, tundra, city…)
-- `--magic` (low, med, high)
-- `--factions` (number)
+**Create**
+- `!world create Ryoko-Delta`
+- `!world seed 1984-CRACK` (optional: locks your vibe)
 
-**See it**
-- `!map`
-"""
+**Biomes**
+- `!world biome forest`
+- `!world biome coast`
+- `!world biome ruins`
+- `!world biome floating-islands`
 
-HELP_HOME = """🏰 **Home / Fortress Builder — Help**
+**Weather + mood**
+- `!world weather fog`
+- `!world weather storm`
+- `!world weather aurora`
 
-**Add a room**
-- `!home add "Marble Foyer" --style gothic --size large`
+**NPCs**
+- `!world npc add "Kathleen" role="Caretaker of Keys"`
+- `!world npc add "Archivist Moth" role="Library Spirit"`
 
-**Link rooms with a door**
-- `!home door add --from "Marble Foyer" --to "Library"`
+**Quests**
+- `!world quest start "The Door That Remembers"`
+- `!world quest addstep "Find the hinge-sigil"`
+- `!world quest addstep "Speak the vow at the crack"`
 
-Notes:
-- If you add a door to a room that doesn't exist yet, the hub will auto-create that room.
-- Room names are case-sensitive for doors (best to copy/paste the exact room names).
+**Time**
+- `!world time dusk`
 
-**See it**
-- `!map`
-"""
+**Snapshot**
+- `!map`"""
 
-HELP_HOME = """🏰 **Home / Fortress Builder — Help**
+HELP_HOME = """🏰 **Home / Fortress Designer — Help + Examples**
 
-**Add a room**
-- `!home add "Marble Foyer" --style gothic --size large`
+**Create estate**
+- `!home create Homeforge-Mansion`
 
-**Link rooms with a door**
-- `!home door add --from "Marble Foyer" --to "Library"`
+**Add rooms**
+- `!home room add "Atrium" theme="sunlit marble + vines"`
+- `!home room add "Observatory" theme="brass, star-charts, velvet"`
+- `!home room add "Vault" theme="iron + rune locks"`
 
-Notes:
-- If you add a door to a room that doesn't exist yet, the hub will auto-create that room.
-- Room names are case-sensitive for doors (best to copy/paste the exact room names).
+**Connect spaces**
+- `!home hall add "Atrium" "Observatory"`
+- `!home door add "Atrium" "Vault" type="rune-sealed"`
 
-**See it**
-- `!map`
-"""
+**Decor**
+- `!home decorate "Observatory" style="celestial gothic"`
+- `!home decorate "Atrium" style="garden temple"`
+
+**Landscape**
+- `!home landscape add "courtyard fountain"`
+- `!home landscape add "orchard of silver apples"`
+- `!home landscape add "outer wall with watchfires"`
+
+**Upgrades**
+- `!home upgrade bronze`
+- `!home upgrade silver`
+- `!home upgrade gold`
+- `!home upgrade celestial`
+
+**Snapshot**
+- `!map`"""
 
 # --- Storyline engine (lightweight, room-scoped) ---
 STORY_STATE = {}  # room -> dict(chapter:int, beat:int)
@@ -1029,6 +1732,127 @@ def _world_create(room: str, args: list):
     return f"🌍 World created: {name} (biome={biome}, magic={magic}, factions={factions_n})"
 
 
+def _build_world(room: str, args: list):
+    """Advanced builder: !build world --name ... with auto-generated stats.
+
+    Accepts your style:
+      !build world --name "blazy suzan x greatful dead" --biome "forest" --style "new-age" --size "large"         --population "30,000" --home city "turnpoint" --weather "cosmic" --mood "enlightened"         --age_of_world "3.4" --health_of_planet "5.5"
+
+    Notes:
+      - Population / factions / age / health are auto-generated each time.
+      - If you provide a value, it is used as a loose anchor but still randomized.
+    """
+    import random
+    import re as _re
+
+    name = _get_flag(args, '--name', None) or 'Unnamed World'
+    biome = _get_flag(args, '--biome', 'unknown')
+    style = _get_flag(args, '--style', 'unknown')
+    size = _get_flag(args, '--size', 'medium')
+    weather = _get_flag(args, '--weather', 'variable')
+    mood = _get_flag(args, '--mood', 'neutral')
+
+    # Support: --home city "turnpoint"
+    home_city = None
+    if '--home' in args:
+        i = args.index('--home')
+        if i + 2 < len(args) and str(args[i+1]).lower() == 'city':
+            del args[i:i+2]
+            home_city = args.pop(i) if i < len(args) else None
+        else:
+            del args[i:i+1]
+    if home_city is None:
+        home_city = _get_flag(args, '--home_city', None) or _get_flag(args, '--home-city', None)
+    if home_city is None:
+        home_city = 'capital'
+
+    pop_raw = _get_flag(args, '--population', None)
+    factions_raw = _get_flag(args, '--factions', None)
+    age_raw = _get_flag(args, '--age_of_world', None) or _get_flag(args, '--age', None)
+    health_raw = _get_flag(args, '--health_of_planet', None) or _get_flag(args, '--health', None)
+
+    def _parse_intish(x):
+        if not x:
+            return None
+        digits = _re.sub(r'[^0-9]', '', str(x))
+        if not digits:
+            return None
+        try:
+            return int(digits)
+        except Exception:
+            return None
+
+    def _parse_floatish(x):
+        if not x:
+            return None
+        m = _re.search(r'([0-9]+(?:\.[0-9]+)?)', str(x))
+        if not m:
+            return None
+        try:
+            return float(m.group(1))
+        except Exception:
+            return None
+
+    # Population anchor by size if not provided
+    pop_anchor = _parse_intish(pop_raw)
+    if pop_anchor is None:
+        size_l = (size or '').lower()
+        if 'small' in size_l:
+            pop_anchor = random.randint(800, 15000)
+        elif 'large' in size_l:
+            pop_anchor = random.randint(12000, 250000)
+        elif 'mega' in size_l or 'huge' in size_l:
+            pop_anchor = random.randint(200000, 6000000)
+        else:
+            pop_anchor = random.randint(5000, 80000)
+    population = int(max(0, round(pop_anchor * random.uniform(0.7, 1.35))))
+
+    # Factions
+    fac_anchor = _parse_intish(factions_raw)
+    if fac_anchor is None:
+        fac_anchor = random.randint(2, 6)
+    factions = int(max(1, min(12, round(fac_anchor + random.choice([-1, 0, 0, 1, 2])))))
+
+    # Age in billions
+    age_anchor = _parse_floatish(age_raw)
+    if age_anchor is None:
+        age_anchor = random.uniform(1.2, 8.5)
+    age_billion_years = round(max(0.1, min(14.0, age_anchor * random.uniform(0.75, 1.25))), 2)
+
+    # Health 0-10
+    health_anchor = _parse_floatish(health_raw)
+    if health_anchor is None:
+        health_anchor = random.uniform(4.0, 8.0)
+    health = round(max(0.0, min(10.0, health_anchor + random.uniform(-1.2, 1.2))), 1)
+
+    st = get_room_state(room)
+    st['world'] = {
+        'name': name,
+        'biome': biome,
+        'style': style,
+        'size': size,
+        'population': population,
+        'home_city': home_city,
+        'weather': weather,
+        'mood': mood,
+        'age_billion_years': age_billion_years,
+        'health_of_planet': health,
+        'factions': factions,
+        'created_at': utc_ts(),
+        'mode': 'build',
+    }
+    set_room_state(room, st)
+
+    return (
+        f"🌍 World built: {name}\n"
+        f"- biome: {biome} | style: {style} | size: {size}\n"
+        f"- population: {population:,} | factions: {factions}\n"
+        f"- home city: {home_city} | weather: {weather} | mood: {mood}\n"
+        f"- age: {age_billion_years} billion years | planet health: {health}/10\n\n"
+        f"Use `!map` to view the snapshot and `!users` to see who’s online."
+    )
+
+
 def _home_add(room: str, args: list):
     if not args:
         return 'Usage: !home add "Room Name" [--style <style>] [--size <size>]'
@@ -1089,7 +1913,23 @@ def _map(room: str):
 
     lines = []
     lines.append(f"== {room} :: World ==")
-    lines.append(f"{w.get('name')} | biome={w.get('biome')} | magic={w.get('magic')} | factions={w.get('factions')}")
+    # World summary (supports both quick-world and build-world)
+    parts = []
+    if w.get('name'): parts.append(str(w.get('name')))
+    if w.get('biome') is not None: parts.append(f"biome={w.get('biome')}")
+    if w.get('style') is not None: parts.append(f"style={w.get('style')}")
+    if w.get('size') is not None: parts.append(f"size={w.get('size')}")
+    if w.get('magic') is not None: parts.append(f"magic={w.get('magic')}")
+    if w.get('factions') is not None: parts.append(f"factions={w.get('factions')}")
+    if w.get('population') is not None:
+        try: parts.append(f"pop={int(w.get('population')):,}")
+        except Exception: parts.append(f"pop={w.get('population')}")
+    if w.get('home_city') is not None: parts.append(f"home-city={w.get('home_city')}")
+    if w.get('weather') is not None: parts.append(f"weather={w.get('weather')}")
+    if w.get('mood') is not None: parts.append(f"mood={w.get('mood')}")
+    if w.get('age_billion_years') is not None: parts.append(f"age={w.get('age_billion_years')}b yrs")
+    if w.get('health_of_planet') is not None: parts.append(f"planet-health={w.get('health_of_planet')}/10")
+    lines.append(' | '.join(parts) if parts else '(no world yet)  try: !build world --name "My World" --biome forest --style new-age --size large --home city "Turnpoint"')
     lines.append("")
     lines.append("== Home Rooms ==")
     if not rooms:
@@ -1199,7 +2039,12 @@ def _pbx_dial(code: str):
                   "- Use !reset if you want a clean slate")
     return f"Ext {e['code']} — {e['name']}\n\n{desc}{bridge}".rstrip()
 def maybe_run_bot(room: str, user: str, msg: str):
-    msg = (msg or "").strip()
+    msg = (msg or '').strip()
+    # Allow quick multi-command buttons like: !map • !users
+    if '•' in msg and msg.lstrip().startswith('!'):
+        for part in [p.strip() for p in msg.split('•') if p.strip()]:
+            maybe_run_bot(room, user, part)
+        return
     if not msg.startswith("!"):
         return
     if (user or "").strip().lower() == BOT_NAME.lower():
@@ -1214,11 +2059,11 @@ def maybe_run_bot(room: str, user: str, msg: str):
         return
 
     cmd = args.pop(0).lower()
-    if cmd == "!help":
-        topic = (args[0].lower() if args else "")
-        if topic in ("world", "worlds"):
+    if cmd == '!help':
+        sub = (args[0].lower() if args else '')
+        if sub == 'world':
             _bot_emit(room, HELP_WORLD)
-        elif topic in ("home", "homes", "fortress", "house"):
+        elif sub == 'home':
             _bot_emit(room, HELP_HOME)
         else:
             _bot_emit(room, HELP_TEXT)
@@ -1255,6 +2100,14 @@ def maybe_run_bot(room: str, user: str, msg: str):
         else:
             _bot_emit(room, 'Usage: !home add "Room Name" ... OR !home door add --from ... --to ...')
         return
+    if cmd == '!build':
+        sub = (args.pop(0).lower() if args else '')
+        if sub == 'world':
+            _bot_emit(room, _build_world(room, args))
+        else:
+            _bot_emit(room, 'Usage: !build world --name "World Name" --biome forest --style new-age --size large --home city "turnpoint" --weather cosmic --mood enlightened')
+        return
+
     if cmd == "!map":
         _bot_emit(room, _map(room))
         return
@@ -1415,7 +2268,7 @@ def on_disconnect():
                 pass
 
     _emit_room_user_list(MAIN_ROOM)
-    _emit_user_list()
+_emit_user_list()
 
 
 @socketio.on("join")
