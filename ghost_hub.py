@@ -1132,6 +1132,8 @@ Use commands in chat starting with `!`
 - `!inv` — show your inventory (items found during the adventure)
 
 **World (quick)**
+- `!build world` — interactive world designer (step-by-step)
+
 - `!build world --name "World Name" --biome forest --style new-age --size large --home city "Turnpoint" --weather cosmic --mood enlightened` — advanced world builder (auto stats)
 - **Quick start:** `!build world --name "ryoko world" --biome "forest-suburbs" --style "mixed" --size "large" --population "300,000,000,000,000,000,00" --home city "edmonton" --weather "seasonal" --mood "enlightened" --age_of_world "14billion years" --health_of_planet "7.5/10"`
 - `!world create <name>` — create a world seed
@@ -2152,6 +2154,153 @@ def _build_world(room: str, args: list):
         f"Use `!map` to view the snapshot and `!users` to see who’s online."
     )
 
+# --- Interactive World Designer (Wizard) ------------------------------------
+_WORLD_WIZARD = {}  # key: (room, user) -> dict
+
+def _world_wizard_key(room: str, user: str):
+    return (str(room or "").strip(), str(user or "").strip().lower())
+
+def _world_wizard_active(room: str, user: str) -> bool:
+    return _world_wizard_key(room, user) in _WORLD_WIZARD
+
+def _world_wizard_cancel(room: str, user: str) -> str:
+    _WORLD_WIZARD.pop(_world_wizard_key(room, user), None)
+    return "🧹 World Designer cancelled."
+
+def _world_wizard_start(room: str, user: str) -> str:
+    k = _world_wizard_key(room, user)
+    _WORLD_WIZARD[k] = {"step": "name", "data": {}, "started_at": utc_ts()}
+    return (
+        "🌍 **World Designer (Interactive)**\n"
+        "Answer each step. Type `cancel` anytime.\n\n"
+        "**Step 1/9 — Name**\n"
+        "What is the world name? (example: `Ryoko World`)"
+    )
+
+def _world_wizard_prompt(step: str) -> str:
+    if step == "biome":
+        return (
+            "**Step 2/9 — Biome**\n"
+            "Pick a biome (number or word):\n"
+            "1) forest  2) forest-suburbs  3) desert  4) tundra  5) coast\n"
+            "6) city  7) ruins  8) mountains  9) wetlands  10) archipelago"
+        )
+    if step == "style":
+        return (
+            "**Step 3/9 — Style**\n"
+            "Pick a style (or type your own):\n"
+            "mixed, new-age, gothic, futuristic, rustic, minimal, alien, temple, aquatic"
+        )
+    if step == "size":
+        return "**Step 4/9 — Size**\nPick: tiny / small / medium / large / massive"
+    if step == "home_city":
+        return "**Step 5/9 — Home City**\nWhat is the home city/capital? (example: `Turnpoint`)"
+    if step == "weather":
+        return "**Step 6/9 — Weather**\nPick: seasonal / calm / storm / fog / aurora / cosmic / heatwave"
+    if step == "mood":
+        return "**Step 7/9 — Mood**\nPick: enlightened / calm / mysterious / bright / grounded / dreamy / steadfast / awe"
+    if step == "age":
+        return "**Step 8/9 — Age (optional anchor)**\nType something like `14 billion years` or `3.4` (billion). Or `skip`."
+    if step == "health":
+        return "**Step 9/9 — Planet Health (optional anchor)**\nType like `7.5/10` or `5.5`. Or `skip`."
+    return ""
+
+def _world_wizard_finish(room: str, user: str, data: dict) -> str:
+    args = [
+        "--name", str(data.get("name","Unnamed World")),
+        "--biome", str(data.get("biome","unknown")),
+        "--style", str(data.get("style","mixed")),
+        "--size", str(data.get("size","medium")),
+        "--home_city", str(data.get("home_city","capital")),
+        "--weather", str(data.get("weather","seasonal")),
+        "--mood", str(data.get("mood","neutral")),
+    ]
+    if data.get("age_raw"):
+        args += ["--age_of_world", str(data["age_raw"])]
+    if data.get("health_raw"):
+        args += ["--health_of_planet", str(data["health_raw"])]
+    built = _build_world(room, args)
+    cmdline = (
+        f'!build world --name "{data.get("name","Unnamed World")}" '
+        f'--biome "{data.get("biome","unknown")}" '
+        f'--style "{data.get("style","mixed")}" '
+        f'--size "{data.get("size","medium")}" '
+        f'--home city "{data.get("home_city","capital")}" '
+        f'--weather "{data.get("weather","seasonal")}" '
+        f'--mood "{data.get("mood","neutral")}"'
+        + (f' --age_of_world "{data.get("age_raw")}"' if data.get("age_raw") else "")
+        + (f' --health_of_planet "{data.get("health_raw")}"' if data.get("health_raw") else "")
+    )
+    return built + "\n\n📌 **Command used**\n" + cmdline
+
+def _world_wizard_handle(room: str, user: str, msg: str) -> str | None:
+    k = _world_wizard_key(room, user)
+    st = _WORLD_WIZARD.get(k)
+    if not st:
+        return None
+    t = (msg or "").strip()
+    if not t:
+        return _world_wizard_prompt(st["step"])
+    if t.lower() in {"cancel", "!cancel", "quit", "exit"}:
+        return _world_wizard_cancel(room, user)
+
+    step = st["step"]
+    data = st["data"]
+
+    if step == "name":
+        data["name"] = t.strip().strip('"')
+        st["step"] = "biome"
+        return "✅ Name set: **" + data["name"] + "**\n\n" + _world_wizard_prompt("biome")
+
+    if step == "biome":
+        biome_map = {
+            "1":"forest","2":"forest-suburbs","3":"desert","4":"tundra","5":"coast",
+            "6":"city","7":"ruins","8":"mountains","9":"wetlands","10":"archipelago"
+        }
+        low = t.lower().strip().strip('"')
+        data["biome"] = biome_map.get(low, low)
+        st["step"] = "style"
+        return "✅ Biome: **" + data["biome"] + "**\n\n" + _world_wizard_prompt("style")
+
+    if step == "style":
+        data["style"] = t.strip().strip('"')
+        st["step"] = "size"
+        return "✅ Style: **" + data["style"] + "**\n\n" + _world_wizard_prompt("size")
+
+    if step == "size":
+        data["size"] = t.strip().strip('"').lower()
+        st["step"] = "home_city"
+        return "✅ Size: **" + data["size"] + "**\n\n" + _world_wizard_prompt("home_city")
+
+    if step == "home_city":
+        data["home_city"] = t.strip().strip('"')
+        st["step"] = "weather"
+        return "✅ Home city: **" + data["home_city"] + "**\n\n" + _world_wizard_prompt("weather")
+
+    if step == "weather":
+        data["weather"] = t.strip().strip('"').lower()
+        st["step"] = "mood"
+        return "✅ Weather: **" + data["weather"] + "**\n\n" + _world_wizard_prompt("mood")
+
+    if step == "mood":
+        data["mood"] = t.strip().strip('"').lower()
+        st["step"] = "age"
+        return "✅ Mood: **" + data["mood"] + "**\n\n" + _world_wizard_prompt("age")
+
+    if step == "age":
+        if t.lower() != "skip":
+            data["age_raw"] = t.strip().strip('"')
+        st["step"] = "health"
+        return "✅ Age anchor set.\n\n" + _world_wizard_prompt("health")
+
+    if step == "health":
+        if t.lower() != "skip":
+            data["health_raw"] = t.strip().strip('"')
+        _WORLD_WIZARD.pop(k, None)
+        return "✨ Building world now…\n\n" + _world_wizard_finish(room, user, data)
+
+    return None
+
 
 def _home_add(room: str, args: list):
     if not args:
@@ -2358,6 +2507,19 @@ def maybe_run_bot(room: str, user: str, msg: str):
     if not args:
         return
 
+
+    # --- Interactive Designers (Wizard routing) ---
+    # If a wizard is active, treat this message as wizard input (unless user issues the wizard command again)
+    if _home_wizard_active(room, user) and not msg.lower().startswith("!home build"):
+        resp = _home_wizard_handle(room, user, msg)
+        if resp:
+            _bot_emit(room, resp)
+            return
+    if _world_wizard_active(room, user) and not msg.lower().startswith("!build world"):
+        resp = _world_wizard_handle(room, user, msg)
+        if resp:
+            _bot_emit(room, resp)
+            return
     cmd = args.pop(0).lower()
     if cmd == '!help':
         sub = (args[0].lower() if args else '')
@@ -2405,9 +2567,13 @@ def maybe_run_bot(room: str, user: str, msg: str):
     if cmd == '!build':
         sub = (args.pop(0).lower() if args else '')
         if sub == 'world':
-            _bot_emit(room, _build_world(room, args))
+            # No args? Launch interactive world designer
+            if not args or ('--wizard' in args) or ('--interactive' in args):
+                _bot_emit(room, _world_wizard_start(room, user))
+            else:
+                _bot_emit(room, _build_world(room, args))
         else:
-            _bot_emit(room, 'Usage: !build world --name "World Name" --biome forest --style new-age --size large --home city "turnpoint" --weather cosmic --mood enlightened')
+            _bot_emit(room, 'Usage: !build world --name "World Name" --biome forest --style mixed --size large --population "30000" --home city "Turnpoint" --weather seasonal --mood enlightened --age_of_world "3.4" --health_of_planet "7.5/10"')
         return
 
     if cmd == "!map":
