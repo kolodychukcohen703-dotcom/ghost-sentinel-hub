@@ -1133,6 +1133,7 @@ Use commands in chat starting with `!`
 
 **World (quick)**
 - `!build world --name "World Name" --biome forest --style new-age --size large --home city "Turnpoint" --weather cosmic --mood enlightened` — advanced world builder (auto stats)
+- **Quick start:** `!build world --name "ryoko world" --biome "forest-suburbs" --style "mixed" --size "large" --population "300,000,000,000,000,000,00" --home city "edmonton" --weather "seasonal" --mood "enlightened" --age_of_world "14billion years" --health_of_planet "7.5/10"`
 - `!world create <name>` — create a world seed
 - `!world biome <biome>` — set biome (forest, tundra, desert, coast, city, ruins…)
 - `!world weather <pattern>` — calm, storm, fog, aurora, heatwave…
@@ -1142,6 +1143,7 @@ Use commands in chat starting with `!`
 
 **Home (quick)**
 - `!home create <name>` — create an estate
+- `!home build --name "title" --type "bungalow" --bedrooms "3" --bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"` — intricate home builder (auto-layout)
 - `!home room add "<room>" theme="<theme>"` — add a room
 - `!home hall add "<from>" "<to>"` — connect areas
 - `!home door add "<from>" "<to>" type="<type>"` — door (oak, iron, rune, hidden…)
@@ -1185,6 +1187,9 @@ HELP_HOME = """🏰 **Home / Fortress Designer — Help + Examples**
 
 **Create estate**
 - `!home create Homeforge-Mansion`
+
+**Intricate build (auto-layout)**
+- `!home build --name "title" --type "bungalow" --bedrooms "3" --Bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"`
 
 **Add rooms**
 - `!home room add "Atrium" theme="sunlit marble + vines"`
@@ -1695,7 +1700,134 @@ def _bot_emit(room: str, msg: str):
 
 
 def _parse_args(text: str):
-    return shlex.split(text)
+    args = shlex.split(text)
+    # Normalize a few "spaced" flags users sometimes type:
+    #   -- bedrooms 3  -> --bedrooms 3
+    #   -- total rooms 8 -> --total_rooms 8
+    #   -- color sheen "blue white" -> --color_sheen "blue white"
+    out = []
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok == "--" and i + 1 < len(args):
+            nxt = str(args[i + 1]).lower()
+            if nxt in ("bedrooms", "bathrooms", "kitchen"):
+                out.append("--" + nxt)
+                i += 2
+                continue
+        if tok == "--total" and i + 1 < len(args) and str(args[i + 1]).lower() == "rooms":
+            out.append("--total_rooms")
+            i += 2
+            continue
+        if tok == "--color" and i + 1 < len(args) and str(args[i + 1]).lower() == "sheen":
+            out.append("--color_sheen")
+            i += 2
+            continue
+        out.append(tok)
+        i += 1
+    return out
+
+
+def _home_build(room: str, user: str, args: list):
+    """Intricate home builder.
+
+    Example:
+      !home build --name "title" --type "bungalow" --bedrooms "3" --bathrooms "2" --style "alien" --kitchen "1" --total_rooms "8" --mood "calm" --color_sheen "blue white"
+
+    Notes:
+      - Generates a room list and basic door graph.
+      - Stores into the unified Phase 7 homes_v2 structure.
+    """
+    import random
+    import re as _re
+
+    def _intval(x, default=0):
+        if x is None:
+            return default
+        s = _re.sub(r"[^0-9]", "", str(x))
+        if not s:
+            return default
+        try:
+            return int(s)
+        except Exception:
+            return default
+
+    name = _get_flag(args, "--name", None) or "Untitled Home"
+    htype = _get_flag(args, "--type", None) or _get_flag(args, "--kind", None) or "estate"
+    style = _get_flag(args, "--style", None) or "mixed"
+    mood = _get_flag(args, "--mood", None) or "neutral"
+    color = _get_flag(args, "--color_sheen", None) or _get_flag(args, "--color", None) or ""
+
+    bedrooms = _intval(_get_flag(args, "--bedrooms", None) or _get_flag(args, "--bedroom", None), 0)
+    bathrooms = _intval(_get_flag(args, "--bathrooms", None) or _get_flag(args, "--Bathrooms", None), 0)
+    kitchens = _intval(_get_flag(args, "--kitchen", None), 1)
+    total_rooms = _intval(_get_flag(args, "--total_rooms", None) or _get_flag(args, "--rooms", None), 0)
+    if total_rooms <= 0:
+        # reasonable default: foyer + kitchen + bedrooms + bathrooms + 2 misc
+        total_rooms = 1 + max(1, kitchens) + bedrooms + bathrooms + 2
+
+    st = get_room_state(room)
+    hid = _ensure_default_home(st, room, creator=user or "hub")
+
+    # Create a brand-new home entry
+    hv2 = _st_get_homes_v2(st)
+    hid = _new_home_id()
+    base = {
+        "id": hid,
+        "name": name,
+        "desc": f"{htype} • style:{style} • color:{color}".strip(" •"),
+        "style": style,
+        "size": "",
+        "mood": mood[:12],
+        "type": htype,
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "kitchen": kitchens,
+        "total_rooms": total_rooms,
+        "color_sheen": color,
+        "created_by": user or "hub",
+        "ts": utc_ts(),
+        "rooms": [],
+        "doors": [],
+    }
+
+    # Generate room list
+    generated = []
+    foyer_name = "Marble Foyer" if "goth" in style.lower() else "Entry Foyer"
+    generated.append({"name": foyer_name, "style": style, "size": "medium", "mood": mood})
+
+    for i in range(max(1, kitchens)):
+        generated.append({"name": "Kitchen" if i == 0 else f"Kitchen {i+1}", "style": style, "size": "medium", "mood": mood})
+    for i in range(max(0, bedrooms)):
+        generated.append({"name": "Bedroom" if i == 0 else f"Bedroom {i+1}", "style": style, "size": "medium", "mood": mood})
+    for i in range(max(0, bathrooms)):
+        generated.append({"name": "Bathroom" if i == 0 else f"Bathroom {i+1}", "style": style, "size": "small", "mood": mood})
+
+    # Fill remaining with themed rooms
+    fillers = [
+        "Library", "Lounge", "Observatory", "Workshop", "Garden Atrium",
+        "Meditation Hall", "Arcade Nook", "Studio", "Sanctum", "Portal Chamber",
+        "Dining Hall", "Gallery", "Bathhouse", "Sunroom", "Map Room",
+    ]
+    random.shuffle(fillers)
+    while len(generated) < total_rooms:
+        nm = fillers.pop(0) if fillers else f"Room {len(generated)+1}"
+        generated.append({"name": nm, "style": style, "size": random.choice(["small","medium","large"]), "mood": mood})
+
+    base["rooms"] = generated[:total_rooms]
+
+    # Build a simple door graph from foyer -> each room
+    doors = []
+    for r in base["rooms"][1:]:
+        doors.append({"from": foyer_name, "to": r.get("name"), "type": "archway"})
+    base["doors"] = doors
+
+    hv2[hid] = base
+    _st_set_default_home_id(st, hid)
+    _set_selected_home_id(st, user or "guest", hid)
+    set_room_state(room, st)
+
+    return f"🏠 Built home: {name} ({htype}) • bedrooms:{bedrooms} • baths:{bathrooms} • rooms:{total_rooms} • style:{style} • mood:{mood} • color:{color} • id:{hid}"
 
 
 def _get_flag(args, name, default=None):
@@ -2091,6 +2223,8 @@ def maybe_run_bot(room: str, user: str, msg: str):
         sub = (args.pop(0).lower() if args else "")
         if sub == "add":
             _bot_emit(room, _home_add(room, args))
+        elif sub == "build":
+            _bot_emit(room, _home_build(room, user, args))
         elif sub == "door":
             sub2 = (args.pop(0).lower() if args else "")
             if sub2 == "add":
@@ -2098,7 +2232,7 @@ def maybe_run_bot(room: str, user: str, msg: str):
             else:
                 _bot_emit(room, 'Usage: !home door add --from "Room A" --to "Room B"')
         else:
-            _bot_emit(room, 'Usage: !home add "Room Name" ... OR !home door add --from ... --to ...')
+            _bot_emit(room, 'Usage: !home add "Room Name" ... OR !home build --name "Title" --type bungalow --bedrooms 3 --bathrooms 2 --style alien --kitchen 1 --total_rooms 8 --mood calm --color_sheen "blue white"  OR !home door add --from ... --to ...')
         return
     if cmd == '!build':
         sub = (args.pop(0).lower() if args else '')
