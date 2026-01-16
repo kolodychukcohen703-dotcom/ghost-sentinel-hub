@@ -2494,11 +2494,16 @@ def maybe_run_bot(room: str, user: str, msg: str):
         for part in [p.strip() for p in msg.split('•') if p.strip()]:
             maybe_run_bot(room, user, part)
         return
+    if _world_wizard_active(room, user) and not msg.lower().startswith("!build world"):
+        resp = _world_wizard_handle(room, user, msg)
+        if resp:
+            _bot_emit(room, resp)
+            return
+
     if not msg.startswith("!"):
         return
     if (user or "").strip().lower() == BOT_NAME.lower():
         return
-
     try:
         args = _parse_args(msg)
     except Exception:
@@ -2506,15 +2511,6 @@ def maybe_run_bot(room: str, user: str, msg: str):
         return
     if not args:
         return
-
-
-    # --- Interactive Designers (Wizard routing) ---
-    # If a wizard is active, treat this message as wizard input (unless user issues the wizard command again)
-    if _home_wizard_active(room, user) and not msg.lower().startswith("!home build"):
-        resp = _home_wizard_handle(room, user, msg)
-        if resp:
-            _bot_emit(room, resp)
-            return
     if _world_wizard_active(room, user) and not msg.lower().startswith("!build world"):
         resp = _world_wizard_handle(room, user, msg)
         if resp:
