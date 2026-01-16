@@ -1304,7 +1304,14 @@ def _get_active_world(st: dict) -> tuple[str, dict]:
         return wid, ws[wid]
     return "", {}
 
+
 def _world_list_text(st: dict) -> str:
+    # Ensure legacy single-world state is migrated so list shows it.
+    try:
+        _get_active_world(st)  # may migrate st['world'] -> st['worlds']
+    except Exception:
+        pass
+
     ws = _st_get_worlds(st)
     aw = _st_get_active_world_id(st)
     if not ws:
@@ -2554,6 +2561,42 @@ def _cmd_home_move(room: str, args: list) -> str:
 
     return _cmd_home_where(room)
 
+def _cmd_homes_list(room: str) -> str:
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    try:
+        hv2 = _st_get_homes_v2(st)
+    except Exception:
+        hv2 = st.get("homes_v2") or {}
+
+    if not hv2:
+        return "🏠 **Homes**\n(no saved homes yet) — try `!home build`"
+
+    lines = ["🏠 **Homes Directory**"]
+    for hid, h in hv2.items():
+        h = h or {}
+        name = h.get("name") or "(unnamed)"
+        owner = h.get("creator") or h.get("owner") or "—"
+        wid = h.get("world_id") or _st_get_active_world_id(st) or ""
+        wname = ws.get(wid, {}).get("name") if (wid and wid in ws) else ""
+        loc = h.get("location") or {}
+        city = loc.get("city") or ""
+        area = loc.get("area") or ""
+        pin = loc.get("pin") or ""
+        where = " / ".join([x for x in [city, area, pin] if x])
+        world_txt = (f"{wid} ({wname})" if wname else wid) if wid else "—"
+        suffix = []
+        if where: suffix.append(where)
+        suffix_txt = (" — " + " | ".join(suffix)) if suffix else ""
+        lines.append(f"- {hid}: **{name}** | owner={owner} | world={world_txt}{suffix_txt}")
+    lines.append("")
+    lines.append("Tips: `!home where`, `!home move --to_world <id|name> --city 'X' --area 'Y' --pin 'Z'`")
+    return "\n".join(lines)
+
+def _cmd_worlds_list(room: str) -> str:
+    st = get_room_state(room) or {}
+    return "🌍 **Saved Worlds**\n" + _world_list_text(st)
+
 
 def _home_add(room: str, args: list):
     if not args:
@@ -2818,6 +2861,14 @@ def maybe_run_bot(room: str, user: str, msg: str):
             _bot_emit(room, resp)
             return
     cmd = args.pop(0).lower()
+
+    # Short aliases
+    if cmd in {"!worlds"}:
+        _bot_emit(room, _cmd_worlds_list(room))
+        return
+    if cmd in {"!homes"}:
+        _bot_emit(room, _cmd_homes_list(room))
+        return
     if cmd == '!help':
         sub = (args[0].lower() if args else '')
         if sub == 'world':
@@ -2863,6 +2914,8 @@ def maybe_run_bot(room: str, user: str, msg: str):
             _bot_emit(room, _cmd_home_move(room, args))
         elif sub in {"where", "loc", "location"}:
             _bot_emit(room, _cmd_home_where(room))
+        elif sub in {"list","ls","dir","directory"}:
+            _bot_emit(room, _cmd_homes_list(room))
         elif sub == "door":
             sub2 = (args.pop(0).lower() if args else "")
             if sub2 == "add":
