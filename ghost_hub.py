@@ -1306,11 +1306,19 @@ def _get_active_world(st: dict) -> tuple[str, dict]:
 
 
 def _world_list_text(st: dict) -> str:
-    # Ensure legacy single-world state is migrated so list shows it.
-    try:
-        _get_active_world(st)  # may migrate st['world'] -> st['worlds']
-    except Exception:
-        pass
+    # Show worlds directory; if empty, fall back to legacy single world slot.
+    ws = _st_get_worlds(st)
+    aw = _st_get_active_world_id(st)
+
+    legacy = (st or {}).get("world") or {}
+    if (not ws) and isinstance(legacy, dict) and legacy.get("name"):
+        try:
+            wid = _new_world_id(st)
+            ws = {wid: legacy}
+            _st_set_worlds(st, ws)
+            _st_set_active_world_id(st, wid)
+        except Exception:
+            return f"★ legacy — {legacy.get('name')} (biome={legacy.get('biome','—')})"
 
     ws = _st_get_worlds(st)
     aw = _st_get_active_world_id(st)
@@ -1323,6 +1331,7 @@ def _world_list_text(st: dict) -> str:
         biome = (w or {}).get("biome") or "—"
         lines.append(f"{tag} {wid} — {nm} (biome={biome})")
     return "\n".join(lines)
+
 
 
 def _story(room: str) -> dict:
@@ -2277,6 +2286,18 @@ def _build_world(room: str, args: list):
     ws[wid] = st['world']
     _st_set_worlds(st, ws)
     _st_set_active_world_id(st, wid)
+    # Ensure this world is stored in the per-room worlds directory (for !world list / !map)
+    try:
+        ws = _st_get_worlds(st)
+        wid = _st_get_active_world_id(st)
+        if not wid or wid in ws:
+            wid = _new_world_id(st)
+        ws[wid] = st.get('world', {}) or {}
+        _st_set_worlds(st, ws)
+        _st_set_active_world_id(st, wid)
+    except Exception:
+        pass
+
     set_room_state(room, st)
 
     return (
