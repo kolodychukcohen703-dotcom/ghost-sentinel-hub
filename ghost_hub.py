@@ -417,7 +417,7 @@ def _can_delete_home(room: str, user: str, home: dict):
 def _save_world_state_to_db(room: str, state: dict):
     return _save_world_state(room, state)
 
-def _save_world_state(room: str, state: dict):
+def _save_world_state_legacy(room: str, state: dict):
     state = _normalize_homes_state(state or {})
     _world_state_by_room[room] = state
     try:
@@ -836,35 +836,30 @@ def _load_world_state(room: str):
         for k, v in data.items():
             st[k] = v
 
-def _save_world_state(room: str):
-    """Persist a room's world state to SQLite."""
+
+def _save_world_state(room: str, state: dict | None = None):
+    """Persist a room's world state to SQLite.
+
+    Backwards compatible:
+      - _save_world_state(room)  -> persists current in-memory state for that room
+      - _save_world_state(room, st) -> updates in-memory state then persists
+    """
     room = (room or MAIN_ROOM).strip()
     if not room.startswith("#"):
         room = "#" + room
-    st = _world_state_by_room[room]
-    payload = json.dumps(st, ensure_ascii=False)
-    ts = utc_ts()
-    with _db_lock:
-        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
-        try:
-            conn.execute(
-                "INSERT INTO world_states(room, state_json, updated_utc) VALUES(?,?,?) "
-                "ON CONFLICT(room) DO UPDATE SET state_json=excluded.state_json, updated_utc=excluded.updated_utc",
-                (room, payload, ts),
-            )
-            conn.commit()
-        finally:
-            conn.close()
 
-_db_init()
+    if state is not None:
+        state = _normalize_homes_state(state or {})
+        _world_state_by_room[room] = state
 
-_db_init_world_meta()
-_seed_world_meta_if_empty()
-_room_history = defaultdict(lambda: deque(maxlen=ROOM_HISTORY_MAX))
+    st = _world_state_by_room.get(room, {})
+    try:
+        _save_world_state_to_db(room, st)
+    except Exception:
+        # best-effort: don't crash chat path
+        pass
 
 
-# Track members per room (for /list and multi-channel join)
-_room_members = defaultdict(set)   # room -> set(sid)
 
 def _room_counts():
     return {r: len(sids) for r, sids in _room_members.items() if len(sids) > 0}
