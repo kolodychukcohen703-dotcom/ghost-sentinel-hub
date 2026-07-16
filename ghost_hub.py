@@ -1152,72 +1152,18 @@ def set_room_state(room: str, st: dict):
 
 HELP_TEXT = COMPREHENSIVE_HELP_TEXT
 
-HELP_WORLD = """🌍 **World Designer — Help + Examples**
+CURRENT_BOT_COMMANDS = (
+    "!build world", "!world stats", "!world list", "!world directory",
+    "!world select", "!directory", "!map", "!pbx", "!dial ",
+    "!search ", "!help", "!home build", "!home list", "!home where",
+    "!status", "!users",
+)
 
-**Create**
-- `!world create Ryoko-Delta`
-- `!world seed 1984-CRACK` (optional: locks your vibe)
 
-**Biomes**
-- `!world biome forest`
-- `!world biome coast`
-- `!world biome ruins`
-- `!world biome floating-islands`
-
-**Weather + mood**
-- `!world weather fog`
-- `!world weather storm`
-- `!world weather aurora`
-
-**NPCs**
-- `!world npc add "Kathleen" role="Caretaker of Keys"`
-- `!world npc add "Archivist Moth" role="Library Spirit"`
-
-**Quests**
-- `!world quest start "The Door That Remembers"`
-- `!world quest addstep "Find the hinge-sigil"`
-- `!world quest addstep "Speak the vow at the crack"`
-
-**Time**
-- `!world time dusk`
-
-**Snapshot**
-- `!map`"""
-
-HELP_HOME = """🏰 **Home / Fortress Designer — Help + Examples**
-
-**Create estate**
-- `!home create Homeforge-Mansion`
-
-**Intricate build (auto-layout)**
-- `!home build --name "title" --type "bungalow" --bedrooms "3" --Bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"`
-
-**Add rooms**
-- `!home room add "Atrium" theme="sunlit marble + vines"`
-- `!home room add "Observatory" theme="brass, star-charts, velvet"`
-- `!home room add "Vault" theme="iron + rune locks"`
-
-**Connect spaces**
-- `!home hall add "Atrium" "Observatory"`
-- `!home door add "Atrium" "Vault" type="rune-sealed"`
-
-**Decor**
-- `!home decorate "Observatory" style="celestial gothic"`
-- `!home decorate "Atrium" style="garden temple"`
-
-**Landscape**
-- `!home landscape add "courtyard fountain"`
-- `!home landscape add "orchard of silver apples"`
-- `!home landscape add "outer wall with watchfires"`
-
-**Upgrades**
-- `!home upgrade bronze`
-- `!home upgrade silver`
-- `!home upgrade gold`
-- `!home upgrade celestial`
-
-**Snapshot**
-- `!map`"""
+def _is_current_bot_command(message: str) -> bool:
+    command = (message or "").lower().strip()
+    return any(command == allowed or command.startswith(allowed)
+               for allowed in CURRENT_BOT_COMMANDS)
 
 # --- Storyline engine (lightweight, room-scoped) ---
 STORY_STATE = {}  # room -> dict(chapter:int, beat:int)
@@ -2522,8 +2468,10 @@ def _world_wizard_prompt(index: int, st: dict) -> str:
         return ""
     q = questions[index]
     lines = [f"**Question {index + 1}/{total} — {q['title']}**", q["text"]]
-    for n, option in enumerate(q.get("options", []), 1):
-        lines.append(f"{n}) {option}")
+    numbered = [f"{n}) {option}" for n, option in enumerate(q.get("options", []), 1)]
+    # Lay choices left-to-right in five compact rows of four choices.
+    for start in range(0, len(numbered), 4):
+        lines.append("   |   ".join(numbered[start:start + 4]))
     lines.append("Answer with one number, several numbers such as `2,5,11`, the words shown, or your own custom words.")
     if q.get("examples"):
         lines.append(q["examples"])
@@ -3172,21 +3120,7 @@ def _pbx_dial(code: str, room: str = "", user: str = ""):
     if not e:
         return f"Extension {code} not found."
     desc = (e.get("description") or "").strip()
-    # Add helpful bridges into the existing builder bot.
-    bridge = ""
-    if str(e.get("code")) == "604":
-        bridge = ("\n\n🔧 Ryoko World Forge (web):\n"
-                  "- Create a world: !world create --name \"My World\" --biome forest --magic high --factions 3\n"
-                  "- Add rooms: !home add \"Marble Foyer\" --style gothic --size large\n"
-                  "- Link doors: !home door add --from \"Marble Foyer\" --to \"Library\"\n"
-                  "- View map: !map")
-    if str(e.get("code")) == "605":
-        bridge = ("\n\n🏰 Homeforge (web):\n"
-                  "- Keep adding rooms with !home add ...\n"
-                  "- Use !map to see your growing layout\n"
-                  "- Use !status to see counts\n"
-                  "- Use !reset if you want a clean slate")
-    return f"Ext {e['code']} — {e['name']}\n\n{desc}{bridge}".rstrip()
+    return f"Ext {e['code']} — {e['name']}\n\n{desc}".rstrip()
 def maybe_run_bot(room: str, user: str, msg: str):
     msg = (msg or '').strip()
     # Allow quick multi-command buttons like: !map • !users
@@ -3248,9 +3182,7 @@ def maybe_run_bot(room: str, user: str, msg: str):
 
     if cmd == "!world":
         sub = (args.pop(0).lower() if args else "")
-        if sub == "create":
-            _bot_emit(room, _world_create(room, args))
-        elif sub in {"list", "ls", "directory", "dir"}:
+        if sub in {"list", "ls", "directory", "dir"}:
             _bot_emit(room, _world_directory(room))
         elif sub in {"stats", "statistics"}:
             _bot_emit(room, _world_stats_text(room))
@@ -3258,8 +3190,8 @@ def maybe_run_bot(room: str, user: str, msg: str):
             _bot_emit(room, _cmd_world_select(room, args))
         else:
             _bot_emit(room, """Usage:
-!world create <name>
 !world list
+!world stats
 !world select <id|name>""")
         return
     if cmd == "!home":
@@ -3592,6 +3524,14 @@ def on_send_message(data):
 
     if not msg:
         return
+
+    # Current unified command surface. Obsolete bot commands such as
+    # !create world and !world create are deliberately rejected here.
+    if msg.startswith("!"):
+        if not _is_current_bot_command(msg):
+            _emit_chat(sid, room, "hub",
+                       "That older bot command has been removed. Use the chat hints or type `!help` for the current commands.")
+            return
 
 
 

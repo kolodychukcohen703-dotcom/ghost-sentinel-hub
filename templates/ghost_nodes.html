@@ -60,7 +60,7 @@
     /* Layout */
     .grid {
       display: grid;
-      grid-template-columns: 1fr 320px;
+      grid-template-columns: minmax(0, 1fr) 280px;
       gap: 12px;
       align-items: start;
       margin-top: 12px;
@@ -132,7 +132,7 @@
 
     /* Chat log */
     #chatLog {
-      height: 320px;
+      height: 500px;
       overflow: auto;
       margin-top: 10px;
       padding: 10px;
@@ -143,6 +143,24 @@
     .msg { margin: 0 0 10px 0; }
     .msg .meta { color: #9ca3af; font-size: 0.72rem; }
     .msg .text { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; }
+
+    .chatHints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 10px 0 4px;
+    }
+    .hintChip {
+      border: 1px solid #38bdf866;
+      background: linear-gradient(135deg, rgba(14,116,144,.28), rgba(34,197,94,.16));
+      color: #d9f99d;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-family: "Fira Code", monospace;
+      font-size: .75rem;
+      cursor: pointer;
+    }
+    .hintChip:hover { border-color: #86efac; transform: translateY(-1px); }
 
     /* Presence list */
     #userList {
@@ -316,20 +334,23 @@
 
         <div id="chatLog"></div>
 
+        <div class="chatHints" aria-label="Chat command hints">
+          <button class="hintChip" data-chat-hint="!build world">🌍 !build world</button>
+          <button class="hintChip" data-chat-hint="!world stats">📊 !world stats</button>
+          <button class="hintChip" data-chat-hint="!directory">🗂 !directory</button>
+          <button class="hintChip" data-chat-hint="!pbx">☎ !pbx</button>
+          <button class="hintChip" data-chat-hint="!map">🗺 !map</button>
+          <button class="hintChip" data-chat-hint="!help">❔ !help</button>
+        </div>
+
         <div class="row">
           <input id="chatMsg" class="field" placeholder='Message… (try: !build world)' style="flex: 1; min-width: 220px;" />
           <button id="sendBtn" class="btn">Send</button>
         </div>
 
         <div class="hint">
-          New World Forge commands:<br>
-          <code>!build world</code> — Beginner 25, Medium 50, or Advanced 100<br>
-          <code>!world stats</code> — population and active-world statistics<br>
-          <code>!directory</code> — saved worlds and PBX extensions<br>
-          <code>!pbx</code> — connected PBX directory<br>
-          <code>!dial 604</code> — start World Forge through PBX<br>
-          <code>!map</code> — world, homes, rooms, and doors<br>
-          <code>!help</code> — all current commands
+          Click a hint above or type naturally in chat. World Forge answers accept
+          one choice, several choices such as <code>1,4,7</code>, or custom words.
 <div class="row" style="margin-top:10px;gap:8px;align-items:center;">
   <button id="kbdToggle" class="btn secondary">⌨️</button>
   <span class="subtitle">On‑screen keyboard</span>
@@ -338,8 +359,8 @@
 
 <div id="kbdPanel">
   <div class="kbdRow">
-    <button class="kbdKey primary" data-kbd="/list">/list</button>
-    <button class="kbdKey primary" data-kbd="/join #lobby">/join #lobby</button>
+    <button class="kbdKey primary" data-kbd="!build world">!build world</button>
+    <button class="kbdKey primary" data-kbd="!world stats">!world stats</button>
     <button class="kbdKey primary" data-kbd="!help">!help</button>
   </div>
 
@@ -834,6 +855,15 @@ joined = true;
       const user = (document.getElementById("userName").value || "guest").trim() || "guest";
       socket.emit("send_message", { room: mainRoom, sender: user, msg: text });
     }
+
+    document.querySelectorAll("[data-chat-hint]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const command = (button.dataset.chatHint || "").trim();
+        if (!command) return;
+        if (!joined) joinLobby();
+        setTimeout(() => sendChat(command), 150);
+      });
+    });
 
     document.getElementById("pbxDialBtn").addEventListener("click", () => {
       const sel = document.getElementById("pbxSelect");

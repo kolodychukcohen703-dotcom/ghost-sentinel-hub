@@ -26,6 +26,13 @@ GHOST SENTINEL WORLD FORGE — UNIFIED PBX EDITION
 - Replaced it with !build world, !world stats, !directory, !pbx,
   !dial 604, !map, and !help
 - Added core PBX extensions 600–608 to the visible PBX panel
+- Rebuilt the interface around a taller, wider chat-first layout
+- Added clickable chat hint chips for !build world, !world stats, !directory,
+  !pbx, !map, and !help
+- Removed the old command presentation and old on-screen keyboard shortcuts
+- Obsolete bot commands such as !create world, !world create, !adv, and
+  !home add are rejected before reaching legacy handlers
+- Changed all 1–20 questionnaire choices to five left-to-right rows of four
 
 NOTE ABOUT ZIP SIZE
 The original GitHub download included compiled __pycache__ files. Those caches
