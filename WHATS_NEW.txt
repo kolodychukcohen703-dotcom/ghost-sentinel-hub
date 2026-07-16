@@ -1,0 +1,31 @@
+GHOST SENTINEL WORLD FORGE — UNIFIED PBX EDITION
+================================================
+
+- Beginner questionnaire: 25 questions
+- Medium questionnaire: 50 questions
+- Advanced questionnaire: 100 questions
+- Every question presents choices numbered 1 through 20
+- Multiple selections accepted, for example: 1,4,7
+- Choice words and fully custom written answers accepted
+- back, show, restart, and cancel controls
+- Final preview and confirmation before saving
+- Numeric population parsing, including thousand/million/billion/trillion
+- World Directory assigns saved worlds to PBX extensions 700–799
+- PBX 601: World Directory
+- PBX 602: World Statistics and Population
+- PBX 603: World Map
+- PBX 604: Interactive World Forge
+- PBX 605: Home Forge
+- PBX 606: People Online
+- PBX 607: World Export
+- PBX 608: Help Desk
+- PBX search now searches the connected core extensions
+- !help documents the complete current command system
+- Render Blueprint and persistent /var/data configuration included
+
+NOTE ABOUT ZIP SIZE
+The original GitHub download included compiled __pycache__ files. Those caches
+are not program source and Render regenerates them automatically. They are
+intentionally excluded from this clean deployment ZIP. ghost_hub.py and all
+required templates, dependencies, Render configuration, and helper files are
+included.

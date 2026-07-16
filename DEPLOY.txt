@@ -1,19 +1,60 @@
-Ghost Sentinel Hub v4.1
-- Auto-rejoin lobby on refresh/reconnect (remembers username)
-- Ping indicator (RTT) every 5s
+GHOST SENTINEL HUB — RENDER DEPLOYMENT
+======================================
 
-Render start command:
-gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+EASIEST METHOD: RENDER BLUEPRINT
+--------------------------------
+1. Extract this ZIP.
+2. Upload every extracted file to the root of your GitHub repository.
+   Make sure render.yaml, ghost_hub.py, requirements.txt, and templates are
+   visible at the repository's top level.
+3. Sign in at https://dashboard.render.com
+4. Click New + and choose Blueprint.
+5. Connect the GitHub repository containing these files.
+6. Render will detect render.yaml. Review it and click Apply.
+7. Wait for the build and deployment to finish.
+8. Open the onrender.com address shown by Render.
 
+The included Blueprint uses a paid Starter web service with a 1 GB persistent
+disk. The disk is important: it keeps worlds, statistics, homes, and chat data
+after deployments and restarts.
 
-v4.2.1 hotfix: fix bot help SyntaxError (_bot_emit line)
+MANUAL METHOD
+-------------
+Create a new Web Service and enter:
 
-Hotfix v4.2.2: Python boolean tokens fixed (false/true/null).
+Runtime:
+  Python
 
-Hotfix v4.2.3: removed stray escape characters in bot emit calls.
+Build command:
+  pip install -r requirements.txt
 
-Update v4.3: expanded world/home designer help+examples, `!help world`, `!help home`, and a narrative beat after key commands.
+Start command:
+  gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
 
-Update v4.4: Choose-Your-Own-Adventure engine with branching nodes, `!adv`, `!choose`, `!choices`, and on-page choice buttons.
+Health check path:
+  /
 
-Update v4.5: Adventure upgrades (locked choices + inventory + random encounters) and a tiny live world-map panel. Help + Quick Starts updated.
+Add a persistent disk:
+  Mount path: /var/data
+  Size: 1 GB
+
+Add these environment variables:
+  GHOST_DATA_DIR=/var/data
+  GHOST_HUB_DB=/var/data/worlds.db
+
+Keep one worker and one Render instance because the live Socket.IO presence
+and PBX sessions are stored in the running process.
+
+AFTER DEPLOYMENT
+----------------
+In Ghost Sentinel chat, type:
+
+  !pbx             Open the main PBX
+  !dial 604        Start the interactive World Forge
+  !dial 601        Open the saved-world directory
+  !dial 602        View population and world statistics
+  !dial 603        View the active-world map
+  !dial 700        Connect to the first saved world
+
+If the deployment fails, open the Render Logs tab and copy the final red error
+lines so they can be diagnosed.

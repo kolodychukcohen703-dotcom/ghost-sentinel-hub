@@ -231,8 +231,12 @@ socketio = SocketIO(
 )
 
 BASE_DIR = os.path.dirname(__file__)
-NODES_FILE = os.path.join(BASE_DIR, "ghost_nodes.json")
-STATE_FILE = os.path.join(BASE_DIR, "world_state.json")
+# On Render, mount a persistent disk at /var/data and set GHOST_DATA_DIR=/var/data.
+# Local installs keep using the project folder unless the variable is supplied.
+DATA_DIR = os.environ.get("GHOST_DATA_DIR", BASE_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+NODES_FILE = os.path.join(DATA_DIR, "ghost_nodes.json")
+STATE_FILE = os.path.join(DATA_DIR, "world_state.json")
 
 _data_lock = Lock()
 _state_lock = Lock()
@@ -462,43 +466,50 @@ def _export_world(room: str):
 ROOM_LOG_LIMIT = 20000
 ROOM_HISTORY_ON_JOIN = 1500
 
-COMPREHENSIVE_HELP_TEXT = """Ghost Sentinel Hub — Commands
+COMPREHENSIVE_HELP_TEXT = """🌍 Ghost Sentinel — World Forge
 
-Basics (IRC-style)
-  /list                     List worlds (channels)
-  /join #room               Join a world (you can be in multiple)
-  /part #room               Leave a world
-  /rooms                    Alias of /list
+WORLD BUILDER
+  !build world       Choose Beginner 25, Medium 50, or Advanced 100
+  Each question has choices 1–20 and accepts multiple answers: 1,4,7
 
-Worlds (Phase 2–5)
-  !world                    Show info for the current world
-  !world list               List worlds with descriptions
-  !world stats              Show counts for current world
-  !world export             Export current world as JSON (chat output)
+While building, answer with either the NUMBER or the WORDS shown.
+You can also type your own answer whenever a question says “custom words”.
 
-Ownership / Roles (Phase 3)
-  !world claim              Claim this world as owner (if unclaimed)
-  !world owners             Show owner + helpers
-  !world addhelper @name    (Owner) add helper
-  !world delhelper @name    (Owner) remove helper
+Builder controls:
+  back             Return to the previous question
+  show             Show your answers so far
+  restart          Begin the questionnaire again
+  cancel           Leave without saving
 
-Homes (Unified)
-  !home show                                 Show active home (alias: !map)
-  !home create "name/desc" --style X --size Y --mood 🙂   Create + select a home
-  !home select <id>                           Select an existing home (#id)
-  !home list                                  List homes in this world
-  !home mine                                  List homes you created in this world
-  !home remove <id>                           Remove a home (creator or world manager)
-  !home room add "Room" --style X --size Y --mood 🙂      Add a room (alias: !home add ...)
-  !home door add --from "A" --to "B"                  Link rooms with a door
+At the final preview, answer YES to create the world or BACK to revise it.
 
-Astro (template adventure)
-  !astro help                Astrology-guided adventure prompts (optional)
+WORLD DIRECTORY AND STATISTICS
+  !directory         Show every saved world and its PBX extension
+  !world list        Same saved-world directory
+  !world select ID   Make a saved world active
+  !world stats       Population, builder level, terrain, cities, and growth stats
+  !map               Show the active world and home map
+  !status            Show current server/world status
 
-Notes
-  - Room history loads automatically when you join a world.
-  - Worlds, roles, homes, rooms/doors, and logs persist at /var/data/worlds.db.
-  - !map is now an alias of !home show (single system).
+PBX
+  !pbx               Open the complete PBX directory
+  !dial 601          Saved-world directory
+  !dial 602          Active-world statistics and population
+  !dial 603          Active-world map
+  !dial 604          Start the World Forge
+  !dial 605          Home Forge
+  !dial 606          People online
+  !dial 607          Export active-world data
+  !dial 608          Help desk
+  !dial 700–799      Select a saved world
+  !search WORDS      Search PBX extensions by name or description
+
+HOME FORGE
+  !home build        Start the interactive Home Forge
+  !home list         List homes
+  !home where        Show the active home's world and location
+
+  !help              Show this complete guide
 """
 
 
@@ -1139,47 +1150,7 @@ def set_room_state(room: str, st: dict):
         save_state_all(all_state)
 
 
-HELP_TEXT = """📟 **Ghost Hub Bot Help**
-Use commands in chat starting with `!`
-
-**Core**
-- Tip: you can send multiple commands at once like `!map • !users`
-- Tip: you can click buttons that send multiple commands like `!map • !users`
-- `!help` — this help
-- `!help world` — world designer commands + examples
-- `!help home` — home/fortress designer commands + examples
-- `!status` — server status + active counts
-- `!users` — list users in lobby
-- `!map` — show current world + home snapshot
-
-**Adventure (Choose-Your-Own)**
-- `!adv` — show the current story page + choices (also shows in the 📖 Adventure panel)
-- `!adv reset` — restart the story
-- `!choices` — re-print the current choices
-- `!choose <id>` — pick a choice (example: `!choose 1`)
-- `!inv` — show your inventory (items found during the adventure)
-
-**World (quick)**
-- `!build world` — interactive world designer (step-by-step)
-
-- `!build world --name "World Name" --biome forest --style new-age --size large --home city "Turnpoint" --weather cosmic --mood enlightened` — advanced world builder (auto stats)
-- **Quick start:** `!build world --name "ryoko world" --biome "forest-suburbs" --style "mixed" --size "large" --population "300,000,000,000,000,000,00" --home city "edmonton" --weather "seasonal" --mood "enlightened" --age_of_world "14billion years" --health_of_planet "7.5/10"`
-- `!world create <name>` — create a world seed
-- `!world biome <biome>` — set biome (forest, tundra, desert, coast, city, ruins…)
-- `!world weather <pattern>` — calm, storm, fog, aurora, heatwave…
-- `!world npc add "<name>" role="<role>"` — add an NPC
-- `!world quest start "<title>"` — start a quest
-- `!world time <dawn|day|dusk|night>` — set time-of-day
-
-**Home (quick)**
-- `!home create <name>` — create an estate
-- `!home build --name "title" --type "bungalow" --bedrooms "3" --bathrooms "2" --style "alien" --kitchen "1" --total rooms "8" --mood "calm" --color sheen "blue white"` — intricate home builder (auto-layout)
-- `!home room add "<room>" theme="<theme>"` — add a room
-- `!home hall add "<from>" "<to>"` — connect areas
-- `!home door add "<from>" "<to>" type="<type>"` — door (oak, iron, rune, hidden…)
-- `!home decorate "<room>" style="<style>"` — decorate a room
-- `!home landscape add "<feature>"` — gardens, walls, fountains, orchards…
-- `!home upgrade <bronze|silver|gold|celestial>` — upgrade tier"""
+HELP_TEXT = COMPREHENSIVE_HELP_TEXT
 
 HELP_WORLD = """🌍 **World Designer — Help + Examples**
 
@@ -2314,7 +2285,211 @@ def _build_world(room: str, args: list):
     )
 
 # --- Interactive World Designer (Wizard) ------------------------------------
-_WORLD_WIZARD = {}  # key: (room, user) -> dict
+_WORLD_WIZARD = {}  # key: (room, user) -> {index, data, history, ...}
+
+_WORLD_OPTION_SETS = {
+    "identity": ["Sanctuary", "Frontier", "Kingdom", "Federation", "Dream realm", "Living planet", "Voxel realm", "Ocean world", "Sky world", "Underground world", "Space colony", "Ancient realm", "New civilization", "Post-apocalyptic world", "Magical Earth", "Alternate Earth", "Alien planet", "Artificial world", "Multiverse nexus", "Custom hybrid"],
+    "scale": ["single neighborhood", "small village", "large town", "city region", "small country", "large nation", "small continent", "large continent", "Earth-sized planet", "super-Earth", "gas-giant moons", "ring world", "solar system", "star cluster", "galactic sector", "whole galaxy", "multiple galaxies", "parallel dimensions", "endless generated world", "variable by region"],
+    "terrain": ["forests", "grasslands", "mountains", "valleys", "deserts", "canyons", "tundra", "glaciers", "wetlands", "riverlands", "great lakes", "island chains", "deep oceans", "volcanic lands", "floating islands", "underground caverns", "city-covered land", "farmland", "ruined wilderness", "mixed terrain"],
+    "climate": ["four seasons", "tropical", "subtropical", "Mediterranean", "temperate", "cool and rainy", "cold continental", "polar", "dry desert", "highland", "monsoon", "constant spring", "constant summer", "constant autumn", "constant winter", "wildly changing", "magically controlled", "artificially controlled", "region-specific", "custom climate"],
+    "cosmos": ["one sun", "two suns", "three suns", "one moon", "two moons", "many moons", "planetary rings", "bright nebula", "dense stars", "aurora sky", "eternal daylight", "eternal night", "long twilight", "color-changing sky", "artificial sky", "floating constellations", "visible nearby planets", "comet seasons", "cosmic storms", "custom heavens"],
+    "population": ["100", "1,000", "10,000", "100,000", "1 million", "10 million", "100 million", "1 billion", "5 billion", "10 billion", "50 billion", "100 billion", "1 trillion", "scattered nomads", "seasonal population", "mostly robots", "mostly spirits", "unknown population", "population grows automatically", "custom exact population"],
+    "people": ["humans", "elves", "dwarves", "orcs", "fairies", "giants", "merfolk", "animal peoples", "dragons", "spirits", "angels", "aliens", "robots", "androids", "cyborgs", "plant people", "energy beings", "many peoples together", "mostly unexplored", "custom inhabitants"],
+    "society": ["peaceful councils", "direct democracy", "representative democracy", "constitutional monarchy", "kingdoms", "empire", "independent city-states", "tribes", "clans", "guild government", "scientist council", "magical council", "artificial intelligence", "corporate rule", "religious order", "military rule", "anarchy", "regional systems", "community consensus", "custom government"],
+    "settlement": ["cozy village", "forest sanctuary", "seaside town", "river city", "mountain fortress", "desert oasis", "island capital", "underground city", "floating city", "castle town", "modern suburb", "large capital", "futuristic megacity", "spaceport", "orbital station", "nomadic camp", "farm community", "university city", "ruined city reborn", "custom settlement"],
+    "architecture": ["cozy cottages", "log homes", "farmhouses", "Victorian homes", "Art Deco", "modern homes", "skyscrapers", "medieval castles", "stone fortresses", "ancient temples", "Gothic towers", "futuristic towers", "domed cities", "organic nature homes", "tree houses", "underground halls", "floating buildings", "crystal structures", "mixed regional styles", "custom architecture"],
+    "power": ["no magic", "subtle magic", "low magic", "high magic", "elemental magic", "healing magic", "nature magic", "spirit energy", "rune technology", "modern technology", "near-future technology", "advanced technology", "ancient machines", "artificial intelligence", "robotics", "biotechnology", "clean energy", "magic and technology", "lost technology", "custom power system"],
+    "ecology": ["real-world wildlife", "farm animals", "forest animals", "ocean life", "dinosaurs", "dragons", "magical beasts", "giant creatures", "alien wildlife", "spirit animals", "friendly monsters", "dangerous monsters", "robot animals", "living plants", "bioluminescent life", "seasonal migrations", "protected wildlife", "new evolving species", "mixed ecosystem", "custom creatures"],
+    "adventure": ["completely safe", "safe sanctuary", "mostly peaceful", "gentle mysteries", "family adventure", "exploration", "survival challenges", "dangerous wilderness", "political conflict", "monster threats", "natural disasters", "cosmic dangers", "ancient curses", "technology failures", "war zones", "danger by region", "adjustable difficulty", "story-controlled danger", "player-selected danger", "custom danger"],
+    "simulation": ["real time", "one hour per minute", "one day in 8 minutes", "one week in 8 minutes", "one month in 8 minutes", "one season in 8 minutes", "one year in 8 minutes", "ten years per hour", "pauses when empty", "moves only while playing", "player-controlled speed", "automatic city growth", "automatic home growth", "automatic population growth", "seasonal economy", "generational simulation", "historical eras", "dreamlike time", "different time by region", "custom time flow"],
+    "culture": ["community and family", "art and music", "books and learning", "science and discovery", "craftsmanship", "farming", "trade", "exploration", "spiritual life", "festivals", "sports", "storytelling", "honor and duty", "freedom", "cooperation", "innovation", "nature protection", "ancient traditions", "many blended cultures", "custom values"],
+    "story": ["creation myth", "lost golden age", "ancient war", "great migration", "planetary healing", "new beginning", "return of magic", "technology awakening", "first contact", "fallen empire", "hidden civilization", "prophecy", "world tree", "sacred guardians", "doorway network", "time fracture", "cosmic signal", "peaceful federation", "unknown history", "custom written lore"],
+}
+
+_WORLD_QUESTION_GROUPS = [
+    ("identity", [
+        ("name", "World name", "Choose a suggested identity or type the exact name in your own words."),
+        ("world_type", "World form", "What overall kind of world should this be?"),
+        ("purpose", "World purpose", "What is this world mainly designed to provide?"),
+        ("origin", "World origin", "How did this world first come into existence?"),
+        ("age", "World age", "How old or established should the world feel?"),
+        ("size", "World size", "How large should the world and its explorable map feel?", "scale"),
+        ("reality_rules", "Reality rules", "What kind of reality governs the world?"),
+        ("population", "Population", "Choose an estimated population or type an exact number.", "population"),
+        ("visitor_role", "Visitor role", "What role should new visitors have?"),
+        ("world_symbol", "World symbol", "What identity should appear on maps, flags, and signs?"),
+    ]),
+    ("terrain", [
+        ("terrain", "Dominant terrain", "Select one or several dominant landscapes."),
+        ("secondary_terrain", "Secondary terrain", "Which additional landscapes should appear?"),
+        ("mountains", "Mountain regions", "What form should mountain country take?"),
+        ("water", "Water system", "How should oceans, lakes, and rivers shape the world?"),
+        ("coasts", "Coastlines", "What kinds of coastlines and islands belong here?"),
+        ("underground", "Underground world", "What should exist beneath the surface?"),
+        ("resources", "Natural resources", "Which landscapes provide important resources?"),
+        ("farmland", "Food-growing land", "What terrain supports farms and food production?"),
+        ("wilderness", "Protected wilderness", "What areas remain wild or protected?"),
+        ("landmarks", "Natural landmarks", "Which terrain creates the world's famous landmarks?"),
+    ]),
+    ("climate", [
+        ("climate", "Main climate", "Choose one or several climate patterns."),
+        ("seasons", "Seasons", "How should seasons behave?"),
+        ("rain", "Rain and storms", "What rainfall and storm patterns occur?"),
+        ("snow", "Snow and ice", "Where should snow and ice appear?"),
+        ("temperature", "Temperature range", "What temperature patterns shape daily life?"),
+        ("weather_control", "Weather control", "Can people, magic, or machines affect weather?"),
+        ("extreme_weather", "Extreme weather", "Which rare weather events are possible?"),
+        ("regional_climate", "Regional climates", "How much should climate vary by region?"),
+        ("climate_cycle", "Long climate cycles", "What slow climate changes shape history?"),
+        ("climate_mood", "Weather mood", "What emotional feeling should the weather create?"),
+    ]),
+    ("cosmos", [
+        ("sky", "Sky and suns", "Select the main features visible in the sky."),
+        ("moons", "Moons", "What moons govern nights and tides?"),
+        ("stars", "Stars", "How should the stars appear?"),
+        ("rings", "Planetary rings", "Should rings or orbital structures be visible?"),
+        ("day_cycle", "Day and night", "How should the day-night cycle behave?"),
+        ("auroras", "Auroras", "Where and when should auroras appear?"),
+        ("nearby_worlds", "Nearby worlds", "What neighboring worlds can people see or visit?"),
+        ("cosmic_weather", "Cosmic weather", "Which events arrive from space?"),
+        ("constellations", "Constellations", "What stories or navigation systems live in the stars?"),
+        ("space_travel", "Space access", "How easily can inhabitants travel beyond the world?"),
+    ]),
+    ("people", [
+        ("civilization", "Inhabitants", "Choose every major kind of inhabitant."),
+        ("ancestries", "Peoples and ancestries", "Which peoples form communities together?"),
+        ("languages", "Languages", "Who creates and shares the world's languages?"),
+        ("lifespans", "Lifespans", "Which beings have different lifespans?"),
+        ("migration", "Migration", "Who travels between regions or worlds?"),
+        ("relationships", "Relations between peoples", "Which groups cooperate or compete?"),
+        ("newcomers", "Newcomer welcome", "Who welcomes visitors and new residents?"),
+        ("guardians", "World guardians", "Who protects important places?"),
+        ("workers", "Essential professions", "Who builds and maintains civilization?"),
+        ("future_people", "Future inhabitants", "Who may emerge as the world grows?"),
+    ]),
+    ("society", [
+        ("government", "Government", "Select one or several systems of leadership."),
+        ("law", "Laws", "How are fair rules created and maintained?"),
+        ("regions", "Regional authority", "How independent are regions and cities?"),
+        ("rights", "Rights and freedoms", "What protects the inhabitants?"),
+        ("public_services", "Public services", "Who provides essential services?"),
+        ("economy", "Economy", "How are goods, work, and resources organized?"),
+        ("currency", "Currency and exchange", "What systems support trade?"),
+        ("education", "Education", "Who guides learning and training?"),
+        ("healthcare", "Care and healing", "Who provides physical and emotional care?"),
+        ("diplomacy", "Diplomacy", "How do nations and communities resolve disagreements?"),
+    ]),
+    ("settlement", [
+        ("settlement", "Starting settlement", "Choose where visitors first arrive."),
+        ("capital", "Capital", "What form should the main capital take?"),
+        ("towns", "Towns", "Which town types should populate the map?"),
+        ("villages", "Villages", "Which small communities should grow automatically?"),
+        ("transport_hubs", "Transport hubs", "Where do travel routes meet?"),
+        ("trade_centers", "Trade centers", "Which settlements support markets and commerce?"),
+        ("learning_centers", "Learning centers", "Where are schools, archives, and universities?"),
+        ("safe_places", "Sanctuaries", "Which settlements provide protected spaces?"),
+        ("frontiers", "Frontier settlements", "Where does new growth begin?"),
+        ("ruins", "Reclaimed ruins", "Which old settlements can be rebuilt?"),
+    ]),
+    ("architecture", [
+        ("architecture", "Architecture", "Choose all major building styles."),
+        ("homes", "Homes", "Which home designs should auto-populate residential zones?"),
+        ("towers", "Towers", "What kinds of towers shape skylines?"),
+        ("public_buildings", "Public buildings", "Which styles define civic buildings?"),
+        ("sacred_buildings", "Sacred buildings", "What styles define spiritual places?"),
+        ("materials", "Building materials", "What materials shape construction?"),
+        ("interiors", "Interior design", "Which styles should decorators offer?"),
+        ("doors", "Doors and entrances", "What kinds of working doors connect spaces?"),
+        ("streets", "Street design", "How should streets and paths feel?"),
+        ("city_silhouette", "City silhouette", "What overall skyline should cities create?"),
+    ]),
+    ("power", [
+        ("power", "Magic and technology", "Choose every major source of power."),
+        ("energy", "Energy system", "What supplies homes and cities with energy?"),
+        ("transport", "Transportation", "What powers movement around the world?"),
+        ("communication", "Communication", "How do distant people communicate?"),
+        ("medicine", "Medicine and healing", "What systems support healing?"),
+        ("automation", "Automation", "Which systems can build and grow automatically?"),
+        ("artificial_minds", "Artificial minds", "What role does artificial intelligence have?"),
+        ("ancient_power", "Ancient power", "What forgotten systems remain to be discovered?"),
+        ("power_limits", "Power limits", "What keeps magic or technology balanced?"),
+        ("future_power", "Future discoveries", "What power may inhabitants discover later?"),
+    ]),
+    ("ecology", [
+        ("creatures", "Creatures", "Choose every creature family that belongs here."),
+        ("domestic_animals", "Domestic animals", "Which creatures live alongside communities?"),
+        ("wildlife", "Wildlife", "Which creatures fill wild regions?"),
+        ("ocean_creatures", "Ocean creatures", "What life fills oceans and lakes?"),
+        ("flying_creatures", "Flying creatures", "What life moves through the skies?"),
+        ("plants", "Plants", "What unusual plant life grows here?"),
+        ("dangerous_creatures", "Dangerous creatures", "Which life creates adventure risks?"),
+        ("protected_species", "Protected species", "Which creatures receive special protection?"),
+        ("food_web", "Ecosystem balance", "How should species support one another?"),
+        ("evolution", "Evolving life", "How can wildlife change over simulated years?"),
+    ]),
+    ("adventure", [
+        ("danger", "Danger level", "Choose one or several adventure danger levels."),
+        ("quests", "Quest style", "What kinds of quests should appear?"),
+        ("mysteries", "Mysteries", "What kinds of mysteries can be discovered?"),
+        ("conflict", "Conflict", "What challenges can communities face?"),
+        ("disasters", "Disasters", "Which rare disasters are allowed?"),
+        ("safe_mode", "Safety mode", "How can danger be reduced for peaceful play?"),
+        ("difficulty", "Difficulty control", "Who controls adventure difficulty?"),
+        ("rewards", "Adventure rewards", "What rewards encourage exploration?"),
+        ("exploration", "Exploration", "Which places should invite discovery?"),
+        ("endgame", "Long-term adventure", "What keeps the world interesting over many years?"),
+    ]),
+    ("simulation", [
+        ("time_flow", "Time flow", "Choose how quickly simulated time passes."),
+        ("growth", "Zoning growth", "How should zoned land develop over time?"),
+        ("population_growth", "Population growth", "How should population change?"),
+        ("economic_cycle", "Economic cycle", "How should trade and employment change?"),
+        ("season_cycle", "Season cycle", "How should seasons affect simulation?"),
+        ("construction_speed", "Construction speed", "How quickly do buildings appear?"),
+        ("history_speed", "History speed", "How quickly do eras and generations pass?"),
+        ("pause_rules", "Pause rules", "When should simulation pause?"),
+        ("player_control", "Player time controls", "What time controls should players have?"),
+        ("simulation_goal", "Simulation goal", "What should automatic growth work toward?"),
+    ]),
+]
+
+
+def _build_world_questions():
+    questions = []
+    for option_set, rows in _WORLD_QUESTION_GROUPS:
+        for row in rows:
+            key, title, text = row[:3]
+            row_option_set = row[3] if len(row) > 3 else option_set
+            options = _WORLD_OPTION_SETS[row_option_set]
+            questions.append({"key": key, "title": title, "text": text,
+                              "options": list(options), "custom": True})
+    return questions
+
+
+_WORLD_QUESTIONS = _build_world_questions()
+_WORLD_LEVEL_COUNTS = {"beginner": 25, "medium": 50, "advanced": 100}
+
+_BEGINNER_WORLD_KEYS = [
+    "name", "world_type", "purpose", "size", "population",
+    "terrain", "secondary_terrain", "water", "wilderness", "landmarks",
+    "climate", "seasons", "rain", "sky", "day_cycle",
+    "civilization", "government", "settlement", "architecture", "homes",
+    "creatures", "danger", "time_flow", "growth", "population_growth",
+]
+
+
+def _world_questions_for_level(level: str):
+    wanted = _WORLD_LEVEL_COUNTS.get(level, 25)
+    by_key = {q["key"]: q for q in _WORLD_QUESTIONS}
+    selected = [by_key[key] for key in _BEGINNER_WORLD_KEYS if key in by_key]
+    used = {q["key"] for q in selected}
+    for question in _WORLD_QUESTIONS:
+        if len(selected) >= wanted:
+            break
+        if question["key"] not in used:
+            selected.append(question)
+            used.add(question["key"])
+    return selected[:wanted]
 
 def _world_wizard_key(room: str, user: str):
     return (str(room or "").strip(), str(user or "").strip().lower())
@@ -2329,75 +2504,108 @@ def _world_wizard_cancel(room: str, user: str) -> str:
 
 def _world_wizard_start(room: str, user: str) -> str:
     k = _world_wizard_key(room, user)
-    _WORLD_WIZARD[k] = {"step": "name", "data": {}, "started_at": utc_ts()}
-    st = get_room_state(room) or {}
-    worlds_txt = _world_list_text(st)
-    return ("""
-🌍 **World Designer (Interactive)**
-Answer each step. Type `cancel` anytime.
-
-Tip: the world you create becomes the **active world** for this room.
-
-**Step 1/9 — Name**
-What is the world name? (example: `Ryoko World`)
-""")
+    _WORLD_WIZARD[k] = {"index": 0, "level": None, "data": {}, "history": [], "started_at": utc_ts()}
+    return ("🌍 **GHOST SENTINEL WORLD FORGE**\n"
+            "Choose your questionnaire level:\n"
+            "1) Beginner — 25 questions\n"
+            "2) Medium — 50 questions\n"
+            "3) Advanced — 100 questions\n\n"
+            "Every question has choices **1–20**. You may select one answer (`4`), "
+            "several answers (`1,4,7`), type the choice words, or write a custom answer.\n"
+            "Controls: `back` • `show` • `restart` • `cancel`")
 
 
-def _world_wizard_prompt(step: str) -> str:
-    if step == "biome":
-        return (
-            "**Step 2/9 — Biome**\n"
-            "Pick a biome (number or word):\n"
-            "1) forest  2) forest-suburbs  3) desert  4) tundra  5) coast\n"
-            "6) city  7) ruins  8) mountains  9) wetlands  10) archipelago"
-        )
-    if step == "style":
-        return (
-            "**Step 3/9 — Style**\n"
-            "Pick a style (or type your own):\n"
-            "mixed, new-age, gothic, futuristic, rustic, minimal, alien, temple, aquatic"
-        )
-    if step == "size":
-        return "**Step 4/9 — Size**\nPick: tiny / small / medium / large / massive"
-    if step == "home_city":
-        return "**Step 5/9 — Home City**\nWhat is the home city/capital? (example: `Turnpoint`)"
-    if step == "weather":
-        return "**Step 6/9 — Weather**\nPick: seasonal / calm / storm / fog / aurora / cosmic / heatwave"
-    if step == "mood":
-        return "**Step 7/9 — Mood**\nPick: enlightened / calm / mysterious / bright / grounded / dreamy / steadfast / awe"
-    if step == "age":
-        return "**Step 8/9 — Age (optional anchor)**\nType something like `14 billion years` or `3.4` (billion). Or `skip`."
-    if step == "health":
-        return "**Step 9/9 — Planet Health (optional anchor)**\nType like `7.5/10` or `5.5`. Or `skip`."
-    return ""
+def _world_wizard_prompt(index: int, st: dict) -> str:
+    questions = _world_questions_for_level(st.get("level") or "beginner")
+    total = len(questions)
+    if index >= total:
+        return ""
+    q = questions[index]
+    lines = [f"**Question {index + 1}/{total} — {q['title']}**", q["text"]]
+    for n, option in enumerate(q.get("options", []), 1):
+        lines.append(f"{n}) {option}")
+    lines.append("Answer with one number, several numbers such as `2,5,11`, the words shown, or your own custom words.")
+    if q.get("examples"):
+        lines.append(q["examples"])
+    return "\n".join(lines)
+
+
+def _world_wizard_answers(data: dict) -> str:
+    if not data:
+        return "No answers recorded yet."
+    labels = {q["key"]: q["title"] for q in _WORLD_QUESTIONS}
+    return "\n".join(f"- {labels.get(k, k)}: {v}" for k, v in data.items())
 
 def _world_wizard_finish(room: str, user: str, data: dict) -> str:
-    args = [
-        "--name", str(data.get("name","Unnamed World")),
-        "--biome", str(data.get("biome","unknown")),
-        "--style", str(data.get("style","mixed")),
-        "--size", str(data.get("size","medium")),
-        "--home_city", str(data.get("home_city","capital")),
-        "--weather", str(data.get("weather","seasonal")),
-        "--mood", str(data.get("mood","neutral")),
-    ]
-    if data.get("age_raw"):
-        args += ["--age_of_world", str(data["age_raw"])]
-    if data.get("health_raw"):
-        args += ["--health_of_planet", str(data["health_raw"])]
-    built = _build_world(room, args)
-    cmdline = (
-        f'!build world --name "{data.get("name","Unnamed World")}" '
-        f'--biome "{data.get("biome","unknown")}" '
-        f'--style "{data.get("style","mixed")}" '
-        f'--size "{data.get("size","medium")}" '
-        f'--home city "{data.get("home_city","capital")}" '
-        f'--weather "{data.get("weather","seasonal")}" '
-        f'--mood "{data.get("mood","neutral")}"'
-        + (f' --age_of_world "{data.get("age_raw")}"' if data.get("age_raw") else "")
-        + (f' --health_of_planet "{data.get("health_raw")}"' if data.get("health_raw") else "")
-    )
-    return built + "\n\n📌 **Command used**\n" + cmdline
+    import random
+    world = dict(data)
+    pop_answer = str(data.get("population") or "").lower()
+    pop_presets = {
+        "tiny": 1000, "small": 10000, "growing": 100000,
+        "large": 1000000, "planetary": 1000000000,
+        "crowded": 10000000000, "mostly empty": 100,
+    }
+    population = None
+    numeric_values = []
+    for population_part in pop_answer.split("+"):
+        digits = "".join(ch for ch in population_part if ch.isdigit())
+        if digits:
+            value = int(digits)
+            if "trillion" in population_part and value < 1000:
+                value *= 1000000000000
+            elif "billion" in population_part and value < 1000:
+                value *= 1000000000
+            elif "million" in population_part and value < 1000:
+                value *= 1000000
+            elif "thousand" in population_part and value < 1000:
+                value *= 1000
+            numeric_values.append(value)
+    if numeric_values:
+        population = sum(numeric_values)
+    else:
+        word_values = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                       "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        word_number = next((value for word, value in word_values.items() if word in pop_answer.split()), None)
+        if word_number is not None:
+            if "billion" in pop_answer:
+                population = word_number * 1000000000
+            elif "million" in pop_answer:
+                population = word_number * 1000000
+            elif "thousand" in pop_answer:
+                population = word_number * 1000
+    if population is None:
+        for label, value in pop_presets.items():
+            if label in pop_answer:
+                population = value
+                break
+    if population is None:
+        population = 100000
+    world.update({
+        "name": data.get("name") or "Unnamed World",
+        "biome": data.get("terrain") or "mixed terrain",
+        "style": data.get("architecture") or "mixed styles",
+        "weather": data.get("climate") or "variable",
+        "home_city": data.get("settlement") or "starting settlement",
+        "mood": data.get("danger") or "balanced",
+        "population_label": data.get("population") or "growing",
+        "population": population,
+        "factions": random.randint(2, 7),
+        "questionnaire_level": data.get("questionnaire_level", "beginner"),
+        "questions_answered": data.get("questions_answered", len(data)),
+        "created_at": utc_ts(), "created_by": user, "mode": "interactive-forge-v3",
+    })
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    wid = _new_world_id(st)
+    ws[wid] = world
+    _st_set_worlds(st, ws)
+    _st_set_active_world_id(st, wid)
+    st["world"] = world
+    set_room_state(room, st)
+    return (f"🌎 **WORLD CREATED: {world['name']}**\n"
+            f"World ID: `{wid}`\n\n{_world_wizard_answers(data)}\n\n"
+            "Your new world is saved and is now the active world for this room. "
+            "Type `!build world` whenever you want to forge another one.")
 
 def _world_wizard_handle(room: str, user: str, msg: str) -> str | None:
     k = _world_wizard_key(room, user)
@@ -2405,67 +2613,77 @@ def _world_wizard_handle(room: str, user: str, msg: str) -> str | None:
     if not st:
         return None
     t = (msg or "").strip()
+    index = int(st.get("index", 0))
+    if not st.get("level"):
+        level_map = {"1": "beginner", "beginner": "beginner", "25": "beginner",
+                     "2": "medium", "medium": "medium", "50": "medium",
+                     "3": "advanced", "advanced": "advanced", "100": "advanced"}
+        chosen = level_map.get(t.lower())
+        if not chosen:
+            if t.lower() in {"cancel", "!cancel", "quit", "exit"}:
+                return _world_wizard_cancel(room, user)
+            if t.lower() == "restart":
+                return _world_wizard_start(room, user)
+            return "Please choose `1` Beginner, `2` Medium, or `3` Advanced."
+        st["level"] = chosen
+        st["data"]["questionnaire_level"] = chosen
+        st["data"]["questions_answered"] = _WORLD_LEVEL_COUNTS[chosen]
+        return (f"✅ **{chosen.title()} mode selected — {_WORLD_LEVEL_COUNTS[chosen]} questions.**\n"
+                "Each question provides 20 choices and accepts multiple answers.\n\n" +
+                _world_wizard_prompt(0, st))
     if not t:
-        return _world_wizard_prompt(st["step"])
-    if t.lower() in {"cancel", "!cancel", "quit", "exit"}:
+        return _world_wizard_prompt(index, st)
+    low = t.lower()
+    if low in {"cancel", "!cancel", "quit", "exit"}:
         return _world_wizard_cancel(room, user)
+    if low == "show":
+        return "📋 **Answers so far**\n" + _world_wizard_answers(st["data"]) + "\n\n" + _world_wizard_prompt(index, st)
+    if low == "restart":
+        return _world_wizard_start(room, user)
+    if low == "back":
+        if index <= 0:
+            return "You are already at the first question.\n\n" + _world_wizard_prompt(0, st)
+        index -= 1
+        st["index"] = index
+        questions = _world_questions_for_level(st["level"])
+        st["data"].pop(questions[index]["key"], None)
+        return "↩️ Going back one question.\n\n" + _world_wizard_prompt(index, st)
 
-    step = st["step"]
-    data = st["data"]
+    questions = _world_questions_for_level(st["level"])
+    if index >= len(questions):
+        if low in {"yes", "y", "confirm", "build", "create"}:
+            data = dict(st["data"])
+            _WORLD_WIZARD.pop(k, None)
+            return "✨ Building your world now…\n\n" + _world_wizard_finish(room, user, data)
+        return "Please type `yes` to create the world, `back` to revise it, or `cancel`."
 
-    if step == "name":
-        data["name"] = t.strip().strip('"')
-        st["step"] = "biome"
-        return "✅ Name set: **" + data["name"] + "**\n\n" + _world_wizard_prompt("biome")
+    q = questions[index]
+    answer = t.strip().strip('"')
+    options = q.get("options", [])
+    import re as _wizard_re
+    numeric_parts = [p for p in _wizard_re.split(r"[\s,;+]+", answer) if p]
+    if numeric_parts and all(part.isdigit() for part in numeric_parts) and options:
+        choices = [int(part) for part in numeric_parts]
+        if any(choice < 1 or choice > 20 for choice in choices):
+            return "Please choose only numbers 1–20, or type your own answer in words.\n\n" + _world_wizard_prompt(index, st)
+        # Preserve the user's order while ignoring accidental duplicate numbers.
+        seen = set()
+        answer = " + ".join(options[choice - 1] for choice in choices
+                            if not (choice in seen or seen.add(choice)))
+    if q["key"] == "lore" and low == "skip":
+        answer = "No extra lore supplied"
+    if not answer:
+        return _world_wizard_prompt(index, st)
 
-    if step == "biome":
-        biome_map = {
-            "1":"forest","2":"forest-suburbs","3":"desert","4":"tundra","5":"coast",
-            "6":"city","7":"ruins","8":"mountains","9":"wetlands","10":"archipelago"
-        }
-        low = t.lower().strip().strip('"')
-        data["biome"] = biome_map.get(low, low)
-        st["step"] = "style"
-        return "✅ Biome: **" + data["biome"] + "**\n\n" + _world_wizard_prompt("style")
-
-    if step == "style":
-        data["style"] = t.strip().strip('"')
-        st["step"] = "size"
-        return "✅ Style: **" + data["style"] + "**\n\n" + _world_wizard_prompt("size")
-
-    if step == "size":
-        data["size"] = t.strip().strip('"').lower()
-        st["step"] = "home_city"
-        return "✅ Size: **" + data["size"] + "**\n\n" + _world_wizard_prompt("home_city")
-
-    if step == "home_city":
-        data["home_city"] = t.strip().strip('"')
-        st["step"] = "weather"
-        return "✅ Home city: **" + data["home_city"] + "**\n\n" + _world_wizard_prompt("weather")
-
-    if step == "weather":
-        data["weather"] = t.strip().strip('"').lower()
-        st["step"] = "mood"
-        return "✅ Weather: **" + data["weather"] + "**\n\n" + _world_wizard_prompt("mood")
-
-    if step == "mood":
-        data["mood"] = t.strip().strip('"').lower()
-        st["step"] = "age"
-        return "✅ Mood: **" + data["mood"] + "**\n\n" + _world_wizard_prompt("age")
-
-    if step == "age":
-        if t.lower() != "skip":
-            data["age_raw"] = t.strip().strip('"')
-        st["step"] = "health"
-        return "✅ Age anchor set.\n\n" + _world_wizard_prompt("health")
-
-    if step == "health":
-        if t.lower() != "skip":
-            data["health_raw"] = t.strip().strip('"')
-        _WORLD_WIZARD.pop(k, None)
-        return "✨ Building world now…\n\n" + _world_wizard_finish(room, user, data)
-
-    return None
+    st["data"][q["key"]] = answer
+    st.setdefault("history", []).append(q["key"])
+    index += 1
+    st["index"] = index
+    if index < len(questions):
+        return f"✅ {q['title']}: **{answer}**\n\n" + _world_wizard_prompt(index, st)
+    return ("✅ All questions answered.\n\n🌍 **FINAL WORLD PREVIEW**\n" +
+            _world_wizard_answers(st["data"]) +
+            "\n\nType **yes** to build and save this world. Type `back` to change the last answer or `cancel` to stop.")
 
 # --- World/Home assignment helpers ------------------------------------------
 def _cmd_world_list(room: str) -> str:
@@ -2767,6 +2985,63 @@ def _map(room: str):
     return "\n".join(lines)
 
 
+def _world_directory(room: str) -> str:
+    """One directory for every world created by the interactive forge."""
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    active = _st_get_active_world_id(st)
+    if not ws:
+        return "🌐 **WORLD DIRECTORY**\n(no saved worlds yet)\n\nDial `604` or type `!build world` to create one."
+    lines = ["🌐 **WORLD DIRECTORY**", "Dial a world extension to make it active:", ""]
+    for index, (wid, world) in enumerate(ws.items()):
+        ext = 700 + index
+        marker = "★ ACTIVE" if wid == active else "available"
+        pop = world.get("population")
+        try:
+            pop_text = f"{int(pop):,}"
+        except (TypeError, ValueError):
+            pop_text = str(pop or "—")
+        lines.append(f"{ext} — {world.get('name', wid)} [{marker}]")
+        lines.append(f"      ID {wid} | {world.get('world_type', 'world')} | population {pop_text} | {world.get('questionnaire_level', 'legacy')}")
+    lines.extend(["", "Commands: `!dial 700` or `!world select <id|name>`"])
+    return "\n".join(lines)
+
+
+def _world_stats_text(room: str) -> str:
+    st = get_room_state(room) or {}
+    ws = _st_get_worlds(st)
+    wid, world = _get_active_world(st)
+    if not wid or not world:
+        return "📊 No active world. Dial `604` or type `!build world` to create one."
+    pop = world.get("population", 0)
+    try:
+        pop_text = f"{int(pop):,}"
+    except (TypeError, ValueError):
+        pop_text = str(pop or "—")
+    hv2 = _st_get_homes_v2(st)
+    legacy_rooms = (st.get("home") or {}).get("rooms") or []
+    room_count = len(legacy_rooms) + sum(len((home or {}).get("rooms") or []) for home in hv2.values())
+    home_count = len(hv2)
+    created = str(world.get("created_at") or "—")
+    lines = [
+        f"📊 **WORLD STATISTICS — {world.get('name', wid)}**",
+        f"Directory ID: {wid} | PBX extension: {700 + list(ws).index(wid)}",
+        f"Population: {pop_text} ({world.get('population_label', 'custom')})",
+        f"Builder: {str(world.get('questionnaire_level', 'legacy')).title()} | Questions answered: {world.get('questions_answered', '—')}",
+        f"World type: {world.get('world_type', '—')} | Size: {world.get('size', '—')}",
+        f"Terrain: {world.get('terrain', world.get('biome', '—'))}",
+        f"Climate: {world.get('climate', world.get('weather', '—'))} | Water: {world.get('water', '—')}",
+        f"Civilization: {world.get('civilization', '—')} | Leadership: {world.get('government', '—')}",
+        f"Power: {world.get('power', '—')} | Danger: {world.get('danger', '—')}",
+        f"Starting settlement: {world.get('settlement', world.get('home_city', '—'))}",
+        f"Architecture: {world.get('architecture', world.get('style', '—'))}",
+        f"Time flow: {world.get('time_flow', '—')}",
+        f"Homes: {home_count} | Designed rooms: {room_count} | Saved worlds: {len(ws)}",
+        f"Created by: {world.get('created_by', '—')} | Created: {created}",
+    ]
+    return "\n".join(lines)
+
+
 def _reset(room: str):
     st = _default_state()
     set_room_state(room, st)
@@ -2790,6 +3065,20 @@ def _pbx_visible_entries():
     # Hide secret extensions in listings (still dialable if you know the code).
     return [e for e in PBX_DIRECTORY if not e.get("secret")]
 
+
+def _pbx_core_entries():
+    return [
+        {"code": "600", "name": "Main PBX Directory", "description": "All connected Ghost Sentinel services."},
+        {"code": "601", "name": "Saved World Directory", "description": "Browse worlds and their 700-series extensions."},
+        {"code": "602", "name": "World Statistics", "description": "Population and complete statistics for the active world."},
+        {"code": "603", "name": "World Map", "description": "Map the active world, homes, rooms, and doors."},
+        {"code": "604", "name": "Interactive World Forge", "description": "Beginner 25, Medium 50, or Advanced 100 questions."},
+        {"code": "605", "name": "Interactive Home Forge", "description": "Build and place a home inside the active world."},
+        {"code": "606", "name": "Presence Directory", "description": "Show people currently online."},
+        {"code": "607", "name": "World Export", "description": "Export the active world as JSON data."},
+        {"code": "608", "name": "Help Desk", "description": "Show the current command guide."},
+    ]
+
 def _pbx_find(code: str):
     code = (code or "").strip()
     if not code:
@@ -2799,20 +3088,28 @@ def _pbx_find(code: str):
             return e
     return None
 
-def _pbx_menu():
-    # Compact menu grouped by category.
-    groups = {}
-    for e in _pbx_visible_entries():
-        groups.setdefault(e.get("category","misc"), []).append(e)
-    for k in groups:
-        groups[k].sort(key=lambda x: x.get("code",""))
-    lines = ["📞 Sentinel PBX (web) — quick directory", "Use: !dial <ext>  |  !search <text>", ""]
-    for cat, items in sorted(groups.items(), key=lambda kv: kv[0]):
-        lines.append(f"[{cat}]")
-        for it in items[:30]:
-            lines.append(f"  {it['code']} — {it['name']}")
-        lines.append("")
-    lines.append("Tip: try !dial 604 or !dial 605 for Ryoko builders.")
+def _pbx_menu(room: str = ""):
+    st = get_room_state(room) if room else {}
+    wid, world = _get_active_world(st) if st else ("", {})
+    active = world.get("name", "none") if world else "none"
+    lines = [
+        "📞 **GHOST SENTINEL PBX — MAIN DIRECTORY**",
+        f"Active world: {active}",
+        "Use: `!dial <extension>`", "",
+        "600 — Main PBX directory",
+        "601 — Saved-world directory",
+        "602 — Active-world statistics and population",
+        "603 — Active-world map",
+        "604 — Start interactive World Forge",
+        "605 — Home Forge instructions",
+        "606 — People online",
+        "607 — Export active world data",
+        "608 — Help desk",
+        "",
+        "700–799 — Saved worlds (shown by extension in the World Directory)",
+        "",
+        "Type `!dial 601` to see all worlds or `!dial 604` to build one.",
+    ]
     return "\n".join(lines).rstrip()
 
 def _pbx_search(text: str):
@@ -2820,11 +3117,12 @@ def _pbx_search(text: str):
     if not q:
         return "Usage: !search <text>"
     out = []
-    for e in PBX_DIRECTORY:
+    for e in _pbx_core_entries() + PBX_DIRECTORY:
         # Secret only shows up if searching exact code (same behavior as PBX 411).
         if e.get("secret") and q != str(e.get("code","")).lower():
             continue
-        if q in str(e.get("code","")).lower() or q in (e.get("name","").lower()):
+        searchable = " ".join([str(e.get("code", "")), e.get("name", ""), e.get("description", "")]).lower()
+        if q in searchable:
             out.append(e)
     if not out:
         return f"No matches for '{text}'."
@@ -2836,7 +3134,36 @@ def _pbx_search(text: str):
     lines.append("Dial any result: !dial <ext>")
     return "\n".join(lines).rstrip()
 
-def _pbx_dial(code: str):
+def _pbx_dial(code: str, room: str = "", user: str = ""):
+    if code == "600":
+        return _pbx_menu(room)
+    if code == "601":
+        return _world_directory(room)
+    if code == "602":
+        return _world_stats_text(room)
+    if code == "603":
+        return _map(room)
+    if code == "605":
+        return "🏰 **HOME FORGE**\nType `!home build` to start a home, then use `!map` to see it inside the active world."
+    if code == "606":
+        return _users(room)
+    if code == "607":
+        st = get_room_state(room) or {}
+        wid, world = _get_active_world(st)
+        return "WORLD_EXPORT_JSON\n" + json.dumps({"world_id": wid, "world": world}, ensure_ascii=False, indent=2)
+    if code == "608":
+        return HELP_TEXT
+    if code.isdigit() and 700 <= int(code) <= 799:
+        st = get_room_state(room) or {}
+        ws = _st_get_worlds(st)
+        index = int(code) - 700
+        if index >= len(ws):
+            return f"Extension {code} is not assigned. Dial `601` for the World Directory."
+        wid = list(ws)[index]
+        _st_set_active_world_id(st, wid)
+        st["world"] = ws[wid]
+        set_room_state(room, st)
+        return f"✅ PBX {code} connected. Active world is now **{ws[wid].get('name', wid)}** (`{wid}`).\nDial `602` for statistics or `603` for its map."
     e = _pbx_find(code)
     if not e:
         return f"Extension {code} not found."
@@ -2895,20 +3222,20 @@ def maybe_run_bot(room: str, user: str, msg: str):
         _bot_emit(room, _cmd_homes_list(room))
         return
     if cmd == '!help':
-        sub = (args[0].lower() if args else '')
-        if sub == 'world':
-            _bot_emit(room, HELP_WORLD)
-        elif sub == 'home':
-            _bot_emit(room, HELP_HOME)
-        else:
-            _bot_emit(room, HELP_TEXT)
+        _bot_emit(room, HELP_TEXT)
         return
     if cmd == "!pbx":
-        _bot_emit(room, _pbx_menu())
+        _bot_emit(room, _pbx_menu(room))
         return
     if cmd == "!dial":
         code = (args.pop(0) if args else "").strip()
-        _bot_emit(room, _pbx_dial(code))
+        if code == "604":
+            _bot_emit(room, _world_wizard_start(room, user))
+        else:
+            _bot_emit(room, _pbx_dial(code, room, user))
+        return
+    if cmd in {"!directory", "!worlds"}:
+        _bot_emit(room, _world_directory(room))
         return
     if cmd == "!search":
         text = " ".join(args).strip()
@@ -2919,8 +3246,10 @@ def maybe_run_bot(room: str, user: str, msg: str):
         sub = (args.pop(0).lower() if args else "")
         if sub == "create":
             _bot_emit(room, _world_create(room, args))
-        elif sub in {"list", "ls"}:
-            _bot_emit(room, _cmd_world_list(room))
+        elif sub in {"list", "ls", "directory", "dir"}:
+            _bot_emit(room, _world_directory(room))
+        elif sub in {"stats", "statistics"}:
+            _bot_emit(room, _world_stats_text(room))
         elif sub in {"select", "use"}:
             _bot_emit(room, _cmd_world_select(room, args))
         else:
@@ -2958,16 +3287,9 @@ def maybe_run_bot(room: str, user: str, msg: str):
     if cmd == '!build':
         sub = (args.pop(0).lower() if args else '')
         if sub == 'world':
-            # No args? Launch interactive world designer
-            if not args or ('--wizard' in args) or ('--interactive' in args):
-                _bot_emit(room, _world_wizard_start(room, user))
-            else:
-                _bot_emit(room, _build_world(room, args))
-        elif sub == 'home':
-            # Alias: !build home -> same as !home build (interactive if no args)
-            _bot_emit(room, _home_build(room, user, args))
+            _bot_emit(room, _world_wizard_start(room, user))
         else:
-            _bot_emit(room, '''Usage:\n!build world   (interactive)\n!build home    (interactive)\n\nExamples:\n!build world --name "Ryoko World" --biome forest-suburbs --style mixed --size large\n!build home --name "Marble Haven" --type bungalow --bedrooms 3 --bathrooms 2 --style alien''')
+            _bot_emit(room, "Type `!build world` to start the interactive World Forge.")
         return
 
     if cmd == "!map":
@@ -3792,12 +4114,8 @@ def on_send_message(data):
         _emit_chat(sid, room, "hub", f"{label} — {desc}")
         return
 
-    if msg in ("!world list", "!worlds"):
-        counts = _room_counts()
-        counts.setdefault(MAIN_ROOM, counts.get(MAIN_ROOM, 0))
-        for r, c in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-            label, desc = _format_world_label(r)
-            _emit_chat(sid, room, "hub", f"{label} — {desc}")
+    if msg in ("!world list", "!world directory", "!directory", "!worlds"):
+        _emit_chat(sid, room, "hub", _world_directory(room))
         return
 
 
@@ -3881,10 +4199,7 @@ def on_send_message(data):
 
     # !world stats / !world export (Phase 5)
     if msg in ("!world stats", "!stats"):
-        s = _world_stats(room)
-        label, _ = _format_world_label(room)
-        owner = s.get("owner") or "—"
-        _emit_chat(sid, room, "hub", f"{label} | homes:{s['homes_count']} | msgs:{s['messages_count']} | owner:@{owner}")
+        _emit_chat(sid, room, "hub", _world_stats_text(room))
         return
 
     if msg in ("!world export", "!export"):
@@ -3897,7 +4212,7 @@ def on_send_message(data):
 
 
     # !help (Final)
-    if msg in ("!help", "/help", "!commands"):
+    if msg.startswith("!help") or msg in ("/help", "!commands"):
         for line in COMPREHENSIVE_HELP_TEXT.strip().splitlines():
             _emit_chat(sid, room, "hub", line)
         return
