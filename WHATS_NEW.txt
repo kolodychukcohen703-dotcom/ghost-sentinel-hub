@@ -22,6 +22,10 @@ GHOST SENTINEL WORLD FORGE — UNIFIED PBX EDITION
 - PBX search now searches the connected core extensions
 - !help documents the complete current command system
 - Render Blueprint and persistent /var/data configuration included
+- Removed the obsolete Quick Starts listing from the webpage
+- Replaced it with !build world, !world stats, !directory, !pbx,
+  !dial 604, !map, and !help
+- Added core PBX extensions 600–608 to the visible PBX panel
 
 NOTE ABOUT ZIP SIZE
 The original GitHub download included compiled __pycache__ files. Those caches

@@ -3067,7 +3067,7 @@ def _pbx_visible_entries():
 
 
 def _pbx_core_entries():
-    return [
+    entries = [
         {"code": "600", "name": "Main PBX Directory", "description": "All connected Ghost Sentinel services."},
         {"code": "601", "name": "Saved World Directory", "description": "Browse worlds and their 700-series extensions."},
         {"code": "602", "name": "World Statistics", "description": "Population and complete statistics for the active world."},
@@ -3078,6 +3078,10 @@ def _pbx_core_entries():
         {"code": "607", "name": "World Export", "description": "Export the active world as JSON data."},
         {"code": "608", "name": "Help Desk", "description": "Show the current command guide."},
     ]
+    for entry in entries:
+        entry.setdefault("category", "world-pbx")
+        entry.setdefault("secret", False)
+    return entries
 
 def _pbx_find(code: str):
     code = (code or "").strip()
@@ -3361,7 +3365,8 @@ def index():
                 }
             )
     node_list.sort(key=lambda x: (x["node"], x["service"]))
-    return render_template("ghost_nodes.html", nodes=node_list, main_room=MAIN_ROOM, pbx_entries=_pbx_visible_entries())
+    return render_template("ghost_nodes.html", nodes=node_list, main_room=MAIN_ROOM,
+                           pbx_entries=_pbx_core_entries() + _pbx_visible_entries())
 
 
 @app.route("/register-node", methods=["POST"])
