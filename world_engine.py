@@ -289,16 +289,19 @@ def init_engine(app, db_path: str):
 
     @app.post("/api/world-engine-create")
     def engine_create_world():
-        config = request.get_json(silent=True) or {}
-        world_id, state = _wizard_world(config)
-        now = _iso()
-        with ENGINE_LOCK, _connect(db_path) as conn:
-            base, suffix = world_id, 2
-            while conn.execute("SELECT 1 FROM engine_worlds WHERE world_id=?", (world_id,)).fetchone():
-                world_id = f"{base}-{suffix}"
-                suffix += 1
-            conn.execute("INSERT INTO engine_worlds(world_id,state_json,updated_at) VALUES(?,?,?)", (world_id, json.dumps(state, separators=(",", ":")), now))
-        return jsonify({"ok": True, "world_id": world_id, "name": state["worldName"], "state": state}), 201
+        try:
+            config = request.get_json(silent=True) or {}
+            world_id, state = _wizard_world(config)
+            now = _iso()
+            with ENGINE_LOCK, _connect(db_path) as conn:
+                base, suffix = world_id, 2
+                while conn.execute("SELECT 1 FROM engine_worlds WHERE world_id=?", (world_id,)).fetchone():
+                    world_id = f"{base}-{suffix}"
+                    suffix += 1
+                conn.execute("INSERT INTO engine_worlds(world_id,state_json,updated_at) VALUES(?,?,?)", (world_id, json.dumps(state, separators=(",", ":")), now))
+            return jsonify({"ok": True, "world_id": world_id, "name": state["worldName"], "state": state}), 201
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"World forge failed: {type(exc).__name__}"}), 500
 
     @app.post("/api/world-engine/<world_id>/save")
     def engine_save(world_id):

@@ -43,6 +43,10 @@ included.
 SENTINEL WORLD ENGINE MERGE
 ===========================
 
+* Fixed the World Builder appearing frozen on step 4 Forge Preview.
+* Wizard now scrolls on smaller screens and keeps Back/Create buttons visible.
+* Added staged forge progress, double-click protection, a 45-second timeout,
+  retry button, and clear Render/backend error messages.
 * Fixed Interior Decorator opening without an active home.
 * Interior View now automatically selects the nearest available home.
 * Added a home selector listing every custom and residential home in the world.
