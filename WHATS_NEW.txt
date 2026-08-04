@@ -40,3 +40,47 @@ are not program source and Render regenerates them automatically. They are
 intentionally excluded from this clean deployment ZIP. ghost_hub.py and all
 required templates, dependencies, Render configuration, and helper files are
 included.
+SENTINEL WORLD ENGINE MERGE
+===========================
+
+* Fixed Interior Decorator opening without an active home.
+* Interior View now automatically selects the nearest available home.
+* Added a home selector listing every custom and residential home in the world.
+* Older residential buildings receive a saved interior automatically when opened.
+* Furniture stays isolated per home; room type, item count, clear-room, and return
+  controls now update reliably and autosave with the world.
+* Four-step visual World Builder Wizard for creating new saved worlds.
+* Choose name, ten artistic themes, five terrains, three expandable starting
+  sizes, starter/developed/metropolis density, population, home style, and speed.
+* Final preview summarizes every selection before the world is forged.
+* Duplicate names are preserved safely as separate numbered worlds.
+* Intricate open-world Street View with direction-relative keyboard navigation.
+* Arrow Left/Right turns; Arrow Up/Down walks forward/back; A/D strafes.
+* Hold Shift to run, E to enter homes, and use the on-screen direction pad.
+* Detailed sidewalks, road lanes, streetlights, traffic, pedestrians, storefront
+  signs, glowing windows, clouds, stars, moonlight, and day/night atmosphere.
+* Live rotating minimap shows roads, water, parks, buildings, and facing direction.
+* Automatically creates ten developed showcase worlds on first launch.
+* Each world has a unique visual palette, waterfront, parks, dense neighborhoods,
+  commercial skyline, industrial district, landmarks, citizens, and wildlife.
+* World selector shows population and moves directly between all saved cities.
+* Showcase seeding is non-destructive: missing cities return without overwriting edits.
+* Living World visual upgrade with richer terrain, water, trees, windows,
+  shadows, road markings, sunsets, clouds, and improved buildings.
+* Expandable 16×16 districts and chunked nearby rendering for continued growth.
+* Custom Home Builder with names, six architectural styles, and 1–3 floors.
+* Saved interior for every home, with Bedroom/Bathroom/Living/Kitchen/Dining/Study.
+* Interior furniture: bed, headboard, end tables, dresser, toilet, sink, bathtub,
+  shower, sofa, table, chair, lamp, rug, plant, and removal tool.
+* Smooth map zoom from 55% to 225% using buttons or the mouse wheel.
+* Star Chart mode with a named constellation and neighboring-world routes.
+* Animated townspeople, deer, rabbits, foxes, dogs, and birds roam the map.
+* Street View mode renders the city from the player's position at ground level.
+* Q/R turn the Street View camera; WASD/arrows continue walking.
+* New linked /world-engine visual city builder with an isometric map.
+* Road, residential, commercial, industrial, park, and bulldoze tools.
+* Automatic zone growth and a one-year-in-eight-minutes simulation clock.
+* Click-to-walk plus WASD/arrow movement and interactive building doors.
+* Shared SQLite autosave/resume and live player heartbeats.
+* Safe inactive-player sweep: archive after 30 minutes; purge after 30 days.
+* Repaired recursive SQLite World Forge save bug in the original package.

@@ -219,6 +219,7 @@ from threading import Lock
 from collections import defaultdict, deque
 import shlex
 from typing import Dict, Any, Tuple
+from world_engine import init_engine
 
 app = Flask(__name__, template_folder="templates")
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "ghost-sentinel-dev-key")
@@ -419,7 +420,21 @@ def _can_delete_home(room: str, user: str, home: dict):
     return _can_manage_world(room, user)
 
 def _save_world_state_to_db(room: str, state: dict):
-    return _save_world_state(room, state)
+    room = (room or MAIN_ROOM).strip()
+    if not room.startswith("#"):
+        room = "#" + room
+    payload = json.dumps(_normalize_homes_state(state or {}), ensure_ascii=False)
+    with _db_lock:
+        conn = sqlite3.connect(_normalize_db_path(DB_PATH))
+        try:
+            conn.execute(
+                """INSERT INTO world_states(room,state_json,updated_utc) VALUES(?,?,?)
+                ON CONFLICT(room) DO UPDATE SET state_json=excluded.state_json, updated_utc=excluded.updated_utc""",
+                (room, payload, utc_ts()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
 def _save_world_state_legacy(room: str, state: dict):
     state = _normalize_homes_state(state or {})
@@ -501,6 +516,7 @@ PBX
   !dial 606          People online
   !dial 607          Export active-world data
   !dial 608          Help desk
+  !dial 609          Visual Roblox / SimCity World Engine link
   !dial 700–799      Select a saved world
   !search WORDS      Search PBX extensions by name or description
 
@@ -3025,6 +3041,7 @@ def _pbx_core_entries():
         {"code": "606", "name": "Presence Directory", "description": "Show people currently online."},
         {"code": "607", "name": "World Export", "description": "Export the active world as JSON data."},
         {"code": "608", "name": "Help Desk", "description": "Show the current command guide."},
+        {"code": "609", "name": "Visual World Engine", "description": "Open the linked Roblox / SimCity-style city builder."},
     ]
     for entry in entries:
         entry.setdefault("category", "world-pbx")
@@ -3057,6 +3074,7 @@ def _pbx_menu(room: str = ""):
         "606 — People online",
         "607 — Export active world data",
         "608 — Help desk",
+        "609 — Visual Roblox / SimCity World Engine",
         "",
         "700–799 — Saved worlds (shown by extension in the World Directory)",
         "",
@@ -3105,6 +3123,8 @@ def _pbx_dial(code: str, room: str = "", user: str = ""):
         return "WORLD_EXPORT_JSON\n" + json.dumps({"world_id": wid, "world": world}, ensure_ascii=False, indent=2)
     if code == "608":
         return HELP_TEXT
+    if code == "609":
+        return "🎮 **VISUAL WORLD ENGINE**\nOpen `/world-engine?world=lobby` from this Hub, or press the green World Engine button at the top of the page. Maps autosave and resume from the shared database."
     if code.isdigit() and 700 <= int(code) <= 799:
         st = get_room_state(room) or {}
         ws = _st_get_worlds(st)
@@ -3282,6 +3302,13 @@ def _dm_room(a: str, b: str) -> str:
     return f"dm:{x}:{y}"
 
 
+_db_init()
+_db_init_world_meta()
+_seed_world_meta_if_empty()
+_db_init_world_roles()
+init_engine(app, _normalize_db_path(DB_PATH))
+
+
 @app.route("/")
 def index():
     nodes = load_nodes()
@@ -3354,7 +3381,7 @@ def api_chat():
 
     payload = {"room": room, "sender": sender, "msg": msg, "ts": utc_ts()}
     _room_history[room].append(payload)
-    _log_room_message(room, user, msg, payload.get("ts", utc_ts()))
+    _log_room_message(room, sender, msg, payload.get("ts", utc_ts()))
     emit("chat_message", payload, to=room)
 
     maybe_run_bot(room, sender, msg)
