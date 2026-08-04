@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ghost Sentinel Hub – ACCENET Ghost Network</title>
+  <style>
+    body {
+      background: #020617;
+      color: #e5e7eb;
+      font-family: "Fira Code", monospace;
+      margin: 0;
+      padding: 0;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #22c55e55;
+      box-shadow: 0 0 30px #22c55e33;
+      background: radial-gradient(circle at top, #020617, #000000);
+    }
+    h1 {
+      margin-top: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 1rem;
+      color: #bbf7d0;
+    }
+    .subtitle {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #1f2937;
+    }
+    th {
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.75rem;
+      color: #a5b4fc;
+    }
+    tr:nth-child(even) {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    a {
+      color: #7dd3fc;
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 12px;
+      align-items: start;
+      margin-top: 12px;
+    }
+
+    /* Panels */
+    .panel {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #22c55e22;
+      box-shadow: 0 0 20px #22c55e1a;
+      background: rgba(15, 23, 42, 0.35);
+    }
+    .panel h2 {
+      margin: 0 0 6px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      font-size: 0.85rem;
+      color: #bbf7d0;
+    }
+
+    code {
+      background: rgba(15, 23, 42, 0.7);
+      padding: 1px 6px;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      color: #bbf7d0;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .field, .btn {
+      font-family: "Fira Code", monospace;
+      font-size: 0.8rem;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.7);
+      color: #e5e7eb;
+      outline: none;
+    }
+    .field::placeholder { color: #64748b; }
+
+    .btn {
+      cursor: pointer;
+      border-color: #22c55e55;
+      box-shadow: 0 0 14px #22c55e22;
+      user-select: none;
+    }
+    .btn:hover { border-color: #22c55eaa; }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      background: rgba(2, 6, 23, 0.6);
+    }
+    .pill.ok { color: #bbf7d0; border-color: #22c55e55; }
+    .pill.warn { color: #fcd34d; border-color: #fcd34d55; }
+
+    /* Chat log */
+    #chatLog {
+      height: 500px;
+      overflow: auto;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+    }
+    .msg { margin: 0 0 10px 0; }
+    .msg .meta { color: #9ca3af; font-size: 0.72rem; }
+    .msg .text { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; }
+
+    .chatHints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 10px 0 4px;
+    }
+    .hintChip {
+      border: 1px solid #38bdf866;
+      background: linear-gradient(135deg, rgba(14,116,144,.28), rgba(34,197,94,.16));
+      color: #d9f99d;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-family: "Fira Code", monospace;
+      font-size: .75rem;
+      cursor: pointer;
+    }
+    .hintChip:hover { border-color: #86efac; transform: translateY(-1px); }
+
+    /* Presence list */
+    #userList {
+      max-height: 420px;
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+      padding: 8px;
+      margin-top: 10px;
+    }
+    .userRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .userRow:hover { border-color: #22c55e55; background: rgba(15, 23, 42, 0.55); }
+    .userName { font-size: 0.82rem; color: #e5e7eb; }
+    .userSid { font-size: 0.72rem; color: #64748b; }
+
+    /* DM drawer */
+    #dmPanel {
+      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+      padding: 10px;
+    }
+    #dmTitle { font-size: 0.82rem; color: #bbf7d0; }
+    #dmLog {
+      height: 200px;
+      overflow: auto;
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.55);
+    }
+    .dmMeta { color: #9ca3af; font-size: 0.72rem; }
+    .dmText { color: #e5e7eb; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 10px; }
+
+    /* Matrix reel */
+    #matrix {
+      height: 120px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: rgba(2, 6, 23, 0.75);
+      overflow: hidden;
+      margin-top: 10px;
+      position: relative;
+    }
+    .fall {
+      position: absolute;
+      top: -20px;
+      white-space: pre;
+      font-size: 14px;
+      opacity: 0.9;
+      color: #bbf7d0;
+      text-shadow: 0 0 10px rgba(34,197,94,0.35);
+      animation: drop linear;
+    }
+    @keyframes drop {
+      from { transform: translateY(-20px); opacity: 0.1; }
+      to { transform: translateY(160px); opacity: 0.95; }
+    }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: #9ca3af;
+      line-height: 1.35;
+    }
+  
+    .roomStrip{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px 0}
+    .roomTab{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid #1f2937;background:rgba(2,6,23,0.55);cursor:pointer;font-size:0.78rem;color:#e5e7eb}
+    .roomTab.active{border-color:#22c55e77;box-shadow:0 0 0 2px rgba(34,197,94,0.14) inset}
+    .roomX{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);font-size:0.8rem;opacity:0.9}
+    .roomX:hover{border-color:#ef444477}
+
+  
+    .pillRow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 0}
+    .userPill{cursor:pointer}
+  
+/* Full on-screen keyboard (touch) */
+#kbdPanel { display:none; margin-top:10px; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; background:rgba(2,6,23,0.65); }
+#kbdPanel.show { display:block; }
+.kbdRow { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.kbdKey { padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(15,23,42,0.55); color:#e5e7eb; cursor:pointer; font-size:13px; }
+.kbdKey:hover { filter:brightness(1.1); }
+.kbdKey.wide { flex: 1 1 auto; min-width: 56px; }
+.kbdKey.primary { border-color:rgba(59,130,246,0.5); }
+.kbdKey.toggle { border-color:rgba(16,185,129,0.5); }
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Ghost Sentinel Hub • ACCENET Ghost Network</h1>
+    <div class="subtitle">
+      Nodes register here when they open Cloudflare tunnels.
+      Each row is a ghost door into one of your Sentinel worlds.
+    </div>
+    <div class="row" style="margin:10px 0 14px">
+      <a class="btn" href="/world-engine?world=lobby">🎮 Open Roblox / SimCity World Engine</a>
+      <span class="pill ok">PBX + World Forge linked</span>
+    </div>
+
+    {% if not nodes %}
+      <p>No nodes have registered yet. Once your local node runs
+      <code>sentinel_remote_access_ghost.py</code> and opens a tunnel,
+      it will appear here.</p>
+    {% else %}
+      <table>
+        <thead>
+          <tr>
+            <th>Node</th>
+            <th>Service</th>
+            <th>Public URL</th>
+            <th>Last Seen (UTC)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in nodes %}
+          <tr>
+            <td>{{ entry.node }}</td>
+            <td>{{ entry.service }}</td>
+            <td><a href="{{ entry.url }}" target="_blank" rel="noreferrer">{{ entry.url }}</a></td>
+            <td>{{ entry.last_seen }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <div class="grid">
+
+      <!-- Left: Lobby chat -->
+      <div class="panel">
+        <h2>Main Hall — Lobby</h2>
+        <div class="subtitle" style="margin: 0;">
+          Single room: <code>{{ main_room }}</code>. Bot commands start with <code>!</code> (type <code>!help</code>). DMs: click a user on the right.
+        </div>
+
+        <div class="row" style="gap:10px; margin-top:10px;">
+          <select id="pbxSelect" class="field" style="flex:1; min-width: 240px;">
+            <option value="">📞 PBX quick-dial…</option>
+            {% set bycat = {} %}
+            {% for e in pbx_entries %}
+              {% set _ = bycat.update({e.category: (bycat.get(e.category, []) + [e])}) %}
+            {% endfor %}
+            {% for cat, items in bycat|dictsort %}
+              <optgroup label="{{ cat }}">
+                {% for e in items|sort(attribute='code') %}
+                  <option value="{{ e.code }}">{{ e.code }} — {{ e.name }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+          <button id="pbxDialBtn" class="btn secondary">Dial</button>
+          <button id="pbxMenuBtn" class="btn secondary">Menu</button>
+        </div>
+
+        <div class="row">
+          <input id="userName" class="field" placeholder="Name (e.g. Cohen)" style="flex: 1; min-width: 180px;" />
+          <button id="joinBtn" class="btn">Enter Lobby</button>
+          <span id="status" class="pill warn">disconnected</span>
+          <span class="pill">room: <b id="roomLabel">—</b></span>
+          <span class="pill">ping: <b id="pingLabel">—</b> ms</span>
+        </div>
+
+        <div id="chatLog"></div>
+
+        <div class="chatHints" aria-label="Chat command hints">
+          <button class="hintChip" data-chat-hint="!build world">🌍 !build world</button>
+          <button class="hintChip" data-chat-hint="!world stats">📊 !world stats</button>
+          <button class="hintChip" data-chat-hint="!directory">🗂 !directory</button>
+          <button class="hintChip" data-chat-hint="!pbx">☎ !pbx</button>
+          <button class="hintChip" data-chat-hint="!map">🗺 !map</button>
+          <button class="hintChip" data-chat-hint="!help">❔ !help</button>
+        </div>
+
+        <div class="row">
+          <input id="chatMsg" class="field" placeholder='Message… (try: !build world)' style="flex: 1; min-width: 220px;" />
+          <button id="sendBtn" class="btn">Send</button>
+        </div>
+
+        <div class="hint">
+          Click a hint above or type naturally in chat. World Forge answers accept
+          one choice, several choices such as <code>1,4,7</code>, or custom words.
+<div class="row" style="margin-top:10px;gap:8px;align-items:center;">
+  <button id="kbdToggle" class="btn secondary">⌨️</button>
+  <span class="subtitle">On‑screen keyboard</span>
+</div>
+
+
+<div id="kbdPanel">
+  <div class="kbdRow">
+    <button class="kbdKey primary" data-kbd="!build world">!build world</button>
+    <button class="kbdKey primary" data-kbd="!world stats">!world stats</button>
+    <button class="kbdKey primary" data-kbd="!help">!help</button>
+  </div>
+
+  <!-- Laptop-style rows -->
+  <div class="kbdRow">
+    <button class="kbdKey">`</button>
+    <button class="kbdKey">1</button><button class="kbdKey">2</button><button class="kbdKey">3</button><button class="kbdKey">4</button>
+    <button class="kbdKey">5</button><button class="kbdKey">6</button><button class="kbdKey">7</button><button class="kbdKey">8</button>
+    <button class="kbdKey">9</button><button class="kbdKey">0</button>
+    <button class="kbdKey">-</button><button class="kbdKey">=</button>
+    <button class="kbdKey wide" data-act="back">⌫</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="tab">Tab</button>
+    <button class="kbdKey">Q</button><button class="kbdKey">W</button><button class="kbdKey">E</button><button class="kbdKey">R</button>
+    <button class="kbdKey">T</button><button class="kbdKey">Y</button><button class="kbdKey">U</button><button class="kbdKey">I</button>
+    <button class="kbdKey">O</button><button class="kbdKey">P</button>
+    <button class="kbdKey">[</button><button class="kbdKey">]</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="caps">Caps</button>
+    <button class="kbdKey">A</button><button class="kbdKey">S</button><button class="kbdKey">D</button><button class="kbdKey">F</button>
+    <button class="kbdKey">G</button><button class="kbdKey">H</button><button class="kbdKey">J</button><button class="kbdKey">K</button>
+    <button class="kbdKey">L</button>
+    <button class="kbdKey">;</button><button class="kbdKey">'</button>
+    <button class="kbdKey wide" data-act="enter">Enter</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey wide" data-act="shift">Shift</button>
+    <button class="kbdKey">Z</button><button class="kbdKey">X</button><button class="kbdKey">C</button><button class="kbdKey">V</button>
+    <button class="kbdKey">B</button><button class="kbdKey">N</button><button class="kbdKey">M</button>
+    <button class="kbdKey">,</button><button class="kbdKey">.</button>
+    <button class="kbdKey wide" data-act="send">Send</button>
+  </div>
+
+  <div class="kbdRow">
+    <button class="kbdKey">/</button><button class="kbdKey">#</button><button class="kbdKey">!</button><button class="kbdKey">"</button><button class="kbdKey">@</button>
+    <button class="kbdKey">🙂</button><button class="kbdKey">🌌</button><button class="kbdKey">🗝️</button>
+    <button class="kbdKey wide" data-act="space">Space</button>
+  </div>
+</div>
+
+
+        </div>
+      </div>
+
+      <!-- Right: Presence + DM -->
+      <div class="panel">
+        <h2>Joined Users</h2>
+        <div class="subtitle" style="margin: 0;">
+          Click a user to open a private thread. “Sealed” uses browser encryption + rune cipher.
+        </div>
+
+        <div id="userList"></div>
+
+        <div id="dmPanel">
+          <div class="row" style="justify-content: space-between;">
+            <div id="dmTitle">DM: —</div>
+            <span class="pill">me: <b id="meSid">—</b></span>
+          </div>
+
+          <div class="row" style="margin-top: 8px;">
+            <button id="sealBtn" class="btn" style="flex: 1;">Request Seal</button>
+            <span id="sealState" class="pill warn">unsealed</span>
+            <button id="spinBtn" class="btn" title="Regenerate rune glyphset">Spin Runes</button>
+          </div>
+
+          <div id="matrix" title="Rune reel (visual)"></div>
+
+          <div id="dmLog"></div>
+
+          <div class="row">
+            <input id="dmMsg" class="field" placeholder="DM message…" style="flex: 1; min-width: 170px;" />
+            <button id="dmSendBtn" class="btn">Send</button>
+          </div>
+
+          <div class="hint">
+            Sealed mode is end‑to‑end using WebCrypto (ECDH + AES‑GCM). The server only relays ciphertext.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    // ===== Lobby chat =====
+    const statusEl = document.getElementById("status");
+    const roomLabel = document.getElementById("roomLabel");
+    const logEl = document.getElementById("chatLog");
+
+    // ===== Presence + DM =====
+    const userListEl = document.getElementById("userList");
+    const dmTitleEl = document.getElementById("dmTitle");
+    const dmLogEl = document.getElementById("dmLog");
+    const meSidEl = document.getElementById("meSid");
+    const pingLabel = document.getElementById("pingLabel");
+    const advTitle = document.getElementById("advTitle");
+    const advText = document.getElementById("advText");
+    const advChoices = document.getElementById("advChoices");
+    const advShowBtn = document.getElementById("advShowBtn");
+    const advResetBtn = document.getElementById("advResetBtn");
+    const worldMap = document.getElementById("worldMap");
+    const worldMeta = document.getElementById("worldMeta");
+
+    let lastUserName = localStorage.getItem("ghosthub_username") || "";
+    let autoJoinWanted = false;
+    let pingTimer = null;
+    const sealStateEl = document.getElementById("sealState");
+    const sealBtn = document.getElementById("sealBtn");
+    const spinBtn = document.getElementById("spinBtn");
+    const matrixEl = document.getElementById("matrix");
+
+    let socket = null;
+    let joined = false;
+    let mainRoom = "{{ main_room }}";
+    
+
+    // Multi-room support (v4.5+)
+    let joinedRooms = new Set([mainRoom]);
+
+    
+
+    function renderRoomStrip(){
+      const el = document.getElementById("roomStrip");
+      if(!el) return;
+      el.innerHTML = "";
+      const rooms = Array.from(joinedRooms);
+      rooms.sort((a,b)=> (a===mainRoom?-1:0) - (b===mainRoom?-1:0) || a.localeCompare(b));
+      rooms.forEach(r=>{
+        const tab = document.createElement("div");
+        tab.className = "roomTab" + (r===mainRoom ? " active" : "");
+        const label = document.createElement("span");
+        label.textContent = r;
+        tab.appendChild(label);
+
+        if(r !== "#lobby"){
+          const x = document.createElement("span");
+          x.className = "roomX";
+          x.textContent = "×";
+          x.title = "Leave";
+          x.addEventListener("click", (ev)=>{
+            ev.stopPropagation();
+            partRoomClient(r);
+            renderRoomStrip();
+          });
+          tab.appendChild(x);
+        }
+        tab.addEventListener("click", ()=>{
+          setActiveRoom(r);
+          renderRoomStrip();
+        });
+        el.appendChild(tab);
+      });
+    }
+
+    renderRoomStrip();
+function setActiveRoom(r){
+      if(!r) return;
+      mainRoom = r;
+      roomLabel.textContent = mainRoom;
+      renderRoomStrip();
+      renderRoomStrip();
+      if(socket){
+        socket.emit("join", { user: (document.getElementById("userName").value||"guest"), rooms: Array.from(joinedRooms), active: mainRoom });
+      }
+    }
+
+    function joinRoomClient(r){
+      if(!r) return;
+      r = String(r).trim();
+      if(!r) return;
+      if(!r.startsWith("#")) r = "#"+r;
+      joinedRooms.add(r);
+      renderRoomStrip();
+      mainRoom = r;
+      roomLabel.textContent = mainRoom;
+      renderRoomStrip();
+      if(socket){
+        socket.emit("join", { user: (document.getElementById("userName").value||"guest"), rooms: Array.from(joinedRooms), active: mainRoom });
+      }
+      appendLobbyMsg({room: mainRoom, sender:"hub", ts: new Date().toISOString(), msg:`Joined ${r}. (Now in ${Array.from(joinedRooms).join(", ")})`});
+    }
+
+    function partRoomClient(r){
+      if(!r) return;
+      r = String(r).trim();
+      if(!r) return;
+      if(!r.startsWith("#")) r = "#"+r;
+      if(r === "#lobby") return;
+      joinedRooms.delete(r);
+      renderRoomStrip();
+      if(socket){
+        socket.emit("leave", { room: r });
+      }
+      if(mainRoom === r){
+        mainRoom = "#lobby";
+        roomLabel.textContent = mainRoom;
+        renderRoomStrip();
+      }
+      appendLobbyMsg({room: mainRoom, sender:"hub", ts: new Date().toISOString(), msg:`Left ${r}. (Now in ${Array.from(joinedRooms).join(", ")})`});
+    }
+
+let mySid = null;
+
+    // Restore last used name
+    if (lastUserName) {
+      document.getElementById("userName").value = lastUserName;
+    }
+
+    let dmPeerSid = null;
+    let dmPeerName = null;
+
+    // Sealed crypto state per peer
+    // peers[peerSid] = { sealed: bool, myPriv: CryptoKey, peerPubJwk: object, aesKey: CryptoKey, glyphset: string[] }
+    const peers = {};
+
+    function appendLobbyMsg(m) {
+      // Only display messages from rooms we are in
+      if (m && m.room && !joinedRooms.has(m.room)) return;
+      const div = document.createElement("div");
+      div.className = "msg";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `[${m.ts}] ${m.sender} @ ${m.room}`;
+      const text = document.createElement("div");
+      text.className = "text";
+      text.textContent = m.msg;
+      div.appendChild(meta);
+      div.appendChild(text);
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function appendDm(kind, metaText, bodyText) {
+      const meta = document.createElement("div");
+      meta.className = "dmMeta";
+      meta.textContent = metaText;
+      const text = document.createElement("div");
+      text.className = "dmText";
+      text.textContent = bodyText;
+      dmLogEl.appendChild(meta);
+      dmLogEl.appendChild(text);
+      dmLogEl.scrollTop = dmLogEl.scrollHeight;
+    }
+
+    function setStatus(ok, text) {
+      statusEl.textContent = text;
+      statusEl.className = "pill " + (ok ? "ok" : "warn");
+    }
+
+    function setSealState(sealed, label) {
+      sealStateEl.textContent = label || (sealed ? "sealed" : "unsealed");
+      sealStateEl.className = "pill " + (sealed ? "ok" : "warn");
+    }
+
+    function ensureSocket() {
+      if (socket) return;
+      socket = io();
+      socket.on("connect", () => {
+        setStatus(true, "connected");
+        mySid = socket.id;
+        meSidEl.textContent = (mySid || "—").slice(0, 6);
+
+        // Auto-join on refresh/reconnect if previously joined
+        const stored = (localStorage.getItem("ghosthub_username") || "").trim();
+        if (stored) {
+          document.getElementById("userName").value = stored;
+        }
+        if (stored && (autoJoinWanted || joined || localStorage.getItem("ghosthub_autojoin") === "1")) {
+          autoJoinWanted = true;
+          socket.emit("join", { room: mainRoom, user: stored });
+          
+
+      
+      let currentMeta = "";
+      socket.on("world_meta", (m) => {
+        try{
+          const el = document.getElementById("worldMeta");
+          if(!el || !m) return;
+          const icon = (m.icon||"").trim();
+          const name = (m.name||m.room||"").trim();
+          const desc = (m.description||"").trim();
+          currentMeta = `${icon?icon+" ":""}${name}${desc?(" — "+desc):""}`;
+          el.textContent = currentMeta;
+        }catch(e){}
+      });
+
+
+      let currentWorldRoles = null;
+      socket.on("world_roles", (r) => {
+        try{
+          currentWorldRoles = r || null;
+          const el = document.getElementById("worldMeta");
+          if(!el || !currentMeta) return;
+          const owner = (r && r.owner) ? (" • Owner: @" + r.owner) : "";
+          el.textContent = `${currentMeta}` + owner;
+        }catch(e){}
+      });
+
+socket.on("joined_room", (p) => {
+        try{
+          const r = (p && p.room) || "#lobby";
+          const rooms = (p && p.rooms) || [r];
+          joinedRooms = new Set(rooms);
+          setActiveRoom(r);
+          renderRoomStrip();
+          socket.emit("list_rooms", {});
+        }catch(e){}
+      });
+
+joined = true;
+          roomLabel.textContent = mainRoom;
+        }
+
+        startPingLoop();
+      });
+      socket.on("disconnect", () => {
+        setStatus(false, "disconnected");
+        if (pingLabel) pingLabel.textContent = "—";
+      });
+
+      socket.on("chat_history", (items) => {
+        logEl.innerHTML = "";
+        (items || []).forEach(appendLobbyMsg);
+        // If we got history, we are definitely joined.
+        joined = true;
+        roomLabel.textContent = mainRoom;
+        localStorage.setItem("ghosthub_autojoin", "1");
+      });
+      socket.on("chat_message", (m) => appendLobbyMsg(m));
+
+      // Presence
+      socket.on("user_list_update", (payload) => {
+        const users = (payload && payload.users) || [];
+        renderUserList(users);
+      });
+
+      // DM history (plaintext only)
+      socket.on("dm_history", (payload) => {
+        if (!payload) return;
+        const items = payload.items || [];
+        // Only show if it matches current peer
+        if (payload.to_sid !== dmPeerSid) return;
+        dmLogEl.innerHTML = "";
+        items.forEach((m) => {
+          appendDm("dm", `[${m.ts}] ${m.from_name} → ${m.to_name}`, m.msg);
+        });
+      });
+
+      socket.on("dm_message", (m) => {
+        // Show only if it's our current DM room
+        if (!m) return;
+        const isCurrent = (dmPeerSid && (m.from_sid === dmPeerSid || m.to_sid === dmPeerSid));
+        if (!isCurrent) return;
+        appendDm("dm", `[${m.ts}] ${m.from_name} → ${m.to_name}`, m.msg);
+      });
+
+      // Sealed relay
+      socket.on("dm_sealed", async (m) => {
+        if (!m) return;
+        const isCurrent = (dmPeerSid && (m.from_sid === dmPeerSid || m.to_sid === dmPeerSid));
+        if (!isCurrent) return;
+
+        const peer = (m.from_sid === mySid) ? m.to_sid : m.from_sid;
+        const st = peers[peer];
+        if (!st || !st.aesKey) {
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, "(sealed message received, but channel not sealed yet)");
+          return;
+        }
+        try {
+          const txt = await decryptSealed(st.aesKey, m.iv_b64, m.ciphertext_b64);
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, txt);
+        } catch (e) {
+          appendDm("sealed", `[${m.ts}] ${m.from_name} (sealed)`, "(could not decrypt — seal mismatch)");
+        }
+      });
+
+      // Seal handshake
+      socket.on("seal_request", async (m) => {
+        if (!m) return;
+        // If it's for us, prompt and accept
+        if (m.to_sid !== mySid) return;
+        // Auto-open DM room context if not open
+        if (!dmPeerSid || dmPeerSid !== m.from_sid) {
+          openDm(m.from_sid, m.from_name);
+        }
+        const ok = confirm(`Seal request from ${m.from_name}. Accept sealed channel?`);
+        if (!ok) return;
+
+        const st = await ensurePeerState(m.from_sid);
+        st.peerPubJwk = m.pubkey_jwk;
+
+        // Create our ECDH keypair, export pub, derive AES
+        const myKeys = await crypto.subtle.generateKey(
+          { name: "ECDH", namedCurve: "P-256" },
+          true,
+          ["deriveKey"]
+        );
+        st.myPriv = myKeys.privateKey;
+
+        const myPubJwk = await crypto.subtle.exportKey("jwk", myKeys.publicKey);
+        await finalizeSealForPeer(m.from_sid);
+
+        socket.emit("seal_accept", { to_sid: m.from_sid, pubkey_jwk: myPubJwk });
+        setSealState(true, "sealed");
+        appendDm("sealed", `[${m.ts}] hub`, "Seal accepted. Rune channel established.");
+      });
+
+      socket.on("seal_accept", async (m) => {
+        if (!m) return;
+        if (m.to_sid !== mySid) return;
+        // This is response to our request
+        const st = await ensurePeerState(m.from_sid);
+        st.peerPubJwk = m.pubkey_jwk;
+        await finalizeSealForPeer(m.from_sid);
+        setSealState(true, "sealed");
+        appendDm("sealed", `[${m.ts}] hub`, "Seal accepted. Rune channel established.");
+      });
+    }
+
+    function renderUserList(users) {
+      userListEl.innerHTML = "";
+      const filtered = users.filter(u => u.sid !== mySid);
+      if (!filtered.length) {
+        const p = document.createElement("div");
+        p.className = "subtitle";
+        p.textContent = "No other users online yet.";
+        userListEl.appendChild(p);
+        return;
+      }
+
+      filtered.forEach((u) => {
+        const row = document.createElement("div");
+        row.className = "userRow";
+        const left = document.createElement("div");
+        const nm = document.createElement("div");
+        nm.className = "userName";
+        nm.textContent = u.name || "guest";
+        const sid = document.createElement("div");
+        sid.className = "userSid";
+        sid.textContent = (u.sid || "").slice(0, 6);
+        left.appendChild(nm);
+        left.appendChild(sid);
+
+        const right = document.createElement("span");
+        right.className = "pill ok";
+        right.textContent = "DM";
+
+        row.appendChild(left);
+        row.appendChild(right);
+
+        row.addEventListener("click", () => {
+          openDm(u.sid, u.name);
+        });
+
+        userListEl.appendChild(row);
+      });
+    }
+
+    async function joinLobby() {
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
+      localStorage.setItem("ghosthub_username", user);
+      localStorage.setItem("ghosthub_autojoin", "1");
+      autoJoinWanted = true;
+
+      ensureSocket();
+      socket.emit("join", { room: mainRoom, user }); // room ignored server-side
+      joined = true;
+      roomLabel.textContent = mainRoom;
+    }
+
+    document.getElementById("joinBtn").addEventListener("click", joinLobby);
+
+    // PBX quick-dial helpers
+    function handleInput(msg){
+      msg = (msg||"").trim();
+      if(!msg) return;
+      if(msg === "/list"){ socket.emit("list_rooms", {}); return; }
+      if(msg.startsWith("/join ")){ joinRoomClient(msg.slice(6).trim()); return; }
+      if(msg.startsWith("/part ")){ partRoomClient(msg.slice(6).trim()); return; }
+      if(msg.startsWith("/worlds") || msg.startsWith("/nodes") || msg === "/who" || msg.startsWith("/msg ")){ sendChat(msg); return; }
+      sendChat(msg);
+    }
+
+    function sendChat(text) {
+      if (!socket || !joined) return;
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
+      socket.emit("send_message", { room: mainRoom, sender: user, msg: text });
+    }
+
+    document.querySelectorAll("[data-chat-hint]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const command = (button.dataset.chatHint || "").trim();
+        if (!command) return;
+        if (!joined) joinLobby();
+        setTimeout(() => sendChat(command), 150);
+      });
+    });
+
+    document.getElementById("pbxDialBtn").addEventListener("click", () => {
+      const sel = document.getElementById("pbxSelect");
+      const code = (sel.value || "").trim();
+      if (!code) return;
+      if (!joined) joinLobby();
+      setTimeout(() => sendChat("!dial " + code), 150);
+    });
+
+    document.getElementById("pbxMenuBtn").addEventListener("click", () => {
+      if (!joined) joinLobby();
+      setTimeout(() => sendChat("!pbx"), 150);
+    });
+
+    document.getElementById("sendBtn").addEventListener("click", () => {
+      if (!socket || !joined) return;
+      const user = (document.getElementById("userName").value || "guest").trim() || "guest";
+      const msgBox = document.getElementById("chatMsg");
+      const msg = (msgBox.value || "").trim();
+      if (!msg) return;
+      socket.emit("send_message", { room: mainRoom, user, msg });
+      msgBox.value = "";
+      msgBox.focus();
+    });
+
+    document.getElementById("chatMsg").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("sendBtn").click();
+      }
+    });
+
+    // ===== DM logic =====
+    function openDm(peerSid, peerName) {
+      if (!socket || !joined) {
+        alert("Enter the lobby first.");
+        return;
+      }
+      dmPeerSid = peerSid;
+      dmPeerName = peerName || "guest";
+      dmTitleEl.textContent = `DM: ${dmPeerName} (${(dmPeerSid || "").slice(0, 6)})`;
+      dmLogEl.innerHTML = "";
+      setSealState(false, "unsealed");
+      socket.emit("dm_open", { to_sid: dmPeerSid });
+
+      ensurePeerState(dmPeerSid).then((st) => {
+        // keep UI label in sync
+        setSealState(!!st.aesKey, st.aesKey ? "sealed" : "unsealed");
+        spinRunes(dmPeerSid);
+      });
+    }
+
+    document.getElementById("dmSendBtn").addEventListener("click", async () => {
+      if (!socket || !joined || !dmPeerSid) return;
+      const msgBox = document.getElementById("dmMsg");
+      const txt = (msgBox.value || "").trim();
+      if (!txt) return;
+
+      const st = peers[dmPeerSid];
+      if (st && st.aesKey) {
+        // Sealed send
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const {ciphertextB64, ivB64} = await encryptSealed(st.aesKey, iv, txt);
+        socket.emit("dm_sealed", {
+          to_sid: dmPeerSid,
+          ciphertext_b64: ciphertextB64,
+          iv_b64: ivB64,
+          glyphset: (st.glyphset || []).join("")
+        });
+        appendDm("sealed", `[local] you (sealed) → ${dmPeerName}`, txt);
+      } else {
+        // Plain send
+        socket.emit("dm_send", { to_sid: dmPeerSid, msg: txt });
+        appendDm("dm", `[local] you → ${dmPeerName}`, txt);
+      }
+
+      msgBox.value = "";
+      msgBox.focus();
+    });
+
+    document.getElementById("dmMsg").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("dmSendBtn").click();
+      }
+    });
+
+    // ===== Sealed / Rune cipher =====
+    async function ensurePeerState(peerSid) {
+      if (!peers[peerSid]) {
+        peers[peerSid] = { aesKey: null, myPriv: null, peerPubJwk: null, glyphset: pickGlyphset() };
+      }
+      return peers[peerSid];
+    }
+
+    function pickGlyphset() {
+      // A "slot machine" reel of glyphs (visual). Keep to printable + runes.
+      const pool = ("ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟᛥᛦ" +
+                    "░▒▓█▌▐▀▄▖▗▘▙▚▛▜" +
+                    "⟡⟐⟠⧫◆◇✶✷✸✹✺✦✧" +
+                    "⟁⟟⟊⟁⟙⟠⟒⟓⟔⟕").split("");
+      // Shuffle and slice
+      const shuffled = pool.sort(() => Math.random() - 0.5);
+      return shuffled.slice(0, 32);
+    }
+
+    function spinMatrix(glyphs) {
+      matrixEl.innerHTML = "";
+      const width = matrixEl.getBoundingClientRect().width || 320;
+      const cols = Math.max(10, Math.floor(width / 16));
+      for (let i = 0; i < cols; i++) {
+        const span = document.createElement("div");
+        span.className = "fall";
+        span.style.left = (i * 14 + Math.random() * 6) + "px";
+        span.style.animationDuration = (1.2 + Math.random() * 1.8) + "s";
+        span.style.animationDelay = (Math.random() * 0.4) + "s";
+        const len = 20 + Math.floor(Math.random() * 20);
+        let s = "";
+        for (let j = 0; j < len; j++) s += glyphs[Math.floor(Math.random() * glyphs.length)];
+        span.textContent = s;
+        matrixEl.appendChild(span);
+      }
+      setTimeout(() => { matrixEl.innerHTML = ""; }, 1600);
+    }
+
+    async function spinRunes(peerSid) {
+      const st = await ensurePeerState(peerSid);
+      st.glyphset = pickGlyphset();
+      spinMatrix(st.glyphset);
+      return st.glyphset;
+    }
+
+    spinBtn.addEventListener("click", async () => {
+      if (!dmPeerSid) return;
+      await spinRunes(dmPeerSid);
+      appendDm("sealed", "[hub]", "Runes regenerated (visual map refreshed).");
+    });
+
+    sealBtn.addEventListener("click", async () => {
+      if (!socket || !joined || !dmPeerSid) return;
+
+      const st = await ensurePeerState(dmPeerSid);
+
+      // If already sealed, allow "reset"
+      if (st.aesKey) {
+        const ok = confirm("Seal already active. Break seal (reset) for this DM?");
+        if (!ok) return;
+        st.aesKey = null;
+        st.myPriv = null;
+        st.peerPubJwk = null;
+        setSealState(false, "unsealed");
+        appendDm("sealed", "[hub]", "Seal broken. Channel is now plaintext.");
+        return;
+      }
+
+      // Create ephemeral ECDH and send pub key to peer
+      const myKeys = await crypto.subtle.generateKey(
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        ["deriveKey"]
+      );
+      st.myPriv = myKeys.privateKey;
+      const myPubJwk = await crypto.subtle.exportKey("jwk", myKeys.publicKey);
+
+      await spinRunes(dmPeerSid);
+      socket.emit("seal_request", { to_sid: dmPeerSid, pubkey_jwk: myPubJwk });
+      setSealState(false, "pending");
+      appendDm("sealed", "[hub]", "Seal requested. Waiting for acceptance…");
+    });
+
+    async function finalizeSealForPeer(peerSid) {
+      const st = await ensurePeerState(peerSid);
+      if (!st.myPriv || !st.peerPubJwk) return;
+
+      const peerPub = await crypto.subtle.importKey(
+        "jwk",
+        st.peerPubJwk,
+        { name: "ECDH", namedCurve: "P-256" },
+        true,
+        []
+      );
+
+      // Derive an AES-GCM key
+      const aesKey = await crypto.subtle.deriveKey(
+        { name: "ECDH", public: peerPub },
+        st.myPriv,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+
+      st.aesKey = aesKey;
+      return aesKey;
+    }
+
+    function bufToB64(buf) {
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    
+    function startPingLoop() {
+      if (!socket || !pingLabel) return;
+      if (pingTimer) clearInterval(pingTimer);
+
+      pingTimer = setInterval(() => {
+        if (!socket.connected) {
+          pingLabel.textContent = "—";
+          return;
+        }
+        const t0 = performance.now();
+        socket.timeout(3000).emit("ping_check", {}, (err) => {
+          if (err) {
+            pingLabel.textContent = "timeout";
+            // If we previously joined, try a soft re-join (helps after brief network hiccups).
+            const stored = (localStorage.getItem("ghosthub_username") || "").trim();
+            if (stored && localStorage.getItem("ghosthub_autojoin") === "1") {
+              socket.emit("join", { room: mainRoom, user: stored });
+            }
+            return;
+          }
+          const ms = Math.round(performance.now() - t0);
+          pingLabel.textContent = String(ms);
+        });
+      }, 5000);
+    }
+
+async function encryptSealed(aesKey, ivU8, plaintext) {
+      const enc = new TextEncoder();
+      const pt = enc.encode(plaintext);
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivU8 }, aesKey, pt);
+      return { ciphertextB64: bufToB64(ct), ivB64: bufToB64(ivU8) };
+    }
+
+    async function decryptSealed(aesKey, ivB64, ciphertextB64) {
+      const iv = new Uint8Array(b64ToBuf(ivB64));
+      const ct = b64ToBuf(ciphertextB64);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, ct);
+      const dec = new TextDecoder();
+      return dec.decode(pt);
+    }
+  
+// Touch keyboard logic
+let kbdCaps = false;
+let kbdShift = false;
+const kbdToggle = document.getElementById("kbdToggle");
+const kbdPanel = document.getElementById("kbdPanel");
+function kbdTarget(){return document.getElementById("chatMsg");}
+function kbdInsert(ch){
+  const el=kbdTarget(); if(!el) return;
+  const s=el.selectionStart??el.value.length, e=el.selectionEnd??el.value.length;
+  el.value=(el.value||"").slice(0,s)+ch+(el.value||"").slice(e);
+  el.focus(); try{el.setSelectionRange(s+ch.length,s+ch.length);}catch(e){}
+}
+function kbdBack(){const el=kbdTarget(); if(!el) return;
+  const s=el.selectionStart??el.value.length, e=el.selectionEnd??el.value.length;
+  if(s!==e){el.value=el.value.slice(0,s)+el.value.slice(e);}
+  else if(s>0){el.value=el.value.slice(0,s-1)+el.value.slice(s);}
+  el.focus();
+}
+if(kbdToggle&&kbdPanel){
+  kbdToggle.onclick=()=>kbdPanel.classList.toggle("show");
+  kbdPanel.onclick=(ev)=>{
+  const t=ev.target;
+  if(!(t instanceof HTMLElement)) return;
+
+  const act = t.dataset.act || "";
+  const dk = t.dataset.kbd;
+
+  if (act === "space") { kbdInsert(" "); return; }
+  if (act === "back") { kbdBack(); return; }
+  if (act === "send") { document.getElementById("sendBtn")?.click(); return; }
+  if (act === "enter") { document.getElementById("sendBtn")?.click(); return; }
+  if (act === "tab") { kbdInsert("  "); return; } // 2 spaces feels good in chat
+  if (act === "caps") { kbdCaps = !kbdCaps; kbdShift = false; return; }
+  if (act === "shift") { kbdShift = !kbdShift; return; }
+
+  if (dk) { kbdInsert(dk); return; }
+
+  const key = (t.innerText || "").trim();
+  if (!key) return;
+
+  // If it's a single character key, handle caps/shift for letters
+  if (key.length === 1) {
+    let out = key;
+    if (/^[a-zA-Z]$/.test(out)) {
+      const upper = kbdShift || kbdCaps;
+      out = upper ? out.toUpperCase() : out.toLowerCase();
+      if (kbdShift) kbdShift = false; // one-shot shift
+    }
+    kbdInsert(out);
+    return;
+  }
+
+  // Fallback (e.g. labels)
+};
+}
+
+</script>
+</body>
+</html>

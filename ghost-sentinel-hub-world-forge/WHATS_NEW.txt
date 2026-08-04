@@ -1,0 +1,86 @@
+GHOST SENTINEL WORLD FORGE — UNIFIED PBX EDITION
+================================================
+
+- Beginner questionnaire: 25 questions
+- Medium questionnaire: 50 questions
+- Advanced questionnaire: 100 questions
+- Every question presents choices numbered 1 through 20
+- Multiple selections accepted, for example: 1,4,7
+- Choice words and fully custom written answers accepted
+- back, show, restart, and cancel controls
+- Final preview and confirmation before saving
+- Numeric population parsing, including thousand/million/billion/trillion
+- World Directory assigns saved worlds to PBX extensions 700–799
+- PBX 601: World Directory
+- PBX 602: World Statistics and Population
+- PBX 603: World Map
+- PBX 604: Interactive World Forge
+- PBX 605: Home Forge
+- PBX 606: People Online
+- PBX 607: World Export
+- PBX 608: Help Desk
+- PBX search now searches the connected core extensions
+- !help documents the complete current command system
+- Render Blueprint and persistent /var/data configuration included
+- Removed the obsolete Quick Starts listing from the webpage
+- Replaced it with !build world, !world stats, !directory, !pbx,
+  !dial 604, !map, and !help
+- Added core PBX extensions 600–608 to the visible PBX panel
+- Rebuilt the interface around a taller, wider chat-first layout
+- Added clickable chat hint chips for !build world, !world stats, !directory,
+  !pbx, !map, and !help
+- Removed the old command presentation and old on-screen keyboard shortcuts
+- Obsolete bot commands such as !create world, !world create, !adv, and
+  !home add are rejected before reaching legacy handlers
+- Changed all 1–20 questionnaire choices to five left-to-right rows of four
+
+NOTE ABOUT ZIP SIZE
+The original GitHub download included compiled __pycache__ files. Those caches
+are not program source and Render regenerates them automatically. They are
+intentionally excluded from this clean deployment ZIP. ghost_hub.py and all
+required templates, dependencies, Render configuration, and helper files are
+included.
+SENTINEL WORLD ENGINE MERGE
+===========================
+
+* Fixed Interior Decorator opening without an active home.
+* Interior View now automatically selects the nearest available home.
+* Added a home selector listing every custom and residential home in the world.
+* Older residential buildings receive a saved interior automatically when opened.
+* Furniture stays isolated per home; room type, item count, clear-room, and return
+  controls now update reliably and autosave with the world.
+* Four-step visual World Builder Wizard for creating new saved worlds.
+* Choose name, ten artistic themes, five terrains, three expandable starting
+  sizes, starter/developed/metropolis density, population, home style, and speed.
+* Final preview summarizes every selection before the world is forged.
+* Duplicate names are preserved safely as separate numbered worlds.
+* Intricate open-world Street View with direction-relative keyboard navigation.
+* Arrow Left/Right turns; Arrow Up/Down walks forward/back; A/D strafes.
+* Hold Shift to run, E to enter homes, and use the on-screen direction pad.
+* Detailed sidewalks, road lanes, streetlights, traffic, pedestrians, storefront
+  signs, glowing windows, clouds, stars, moonlight, and day/night atmosphere.
+* Live rotating minimap shows roads, water, parks, buildings, and facing direction.
+* Automatically creates ten developed showcase worlds on first launch.
+* Each world has a unique visual palette, waterfront, parks, dense neighborhoods,
+  commercial skyline, industrial district, landmarks, citizens, and wildlife.
+* World selector shows population and moves directly between all saved cities.
+* Showcase seeding is non-destructive: missing cities return without overwriting edits.
+* Living World visual upgrade with richer terrain, water, trees, windows,
+  shadows, road markings, sunsets, clouds, and improved buildings.
+* Expandable 16×16 districts and chunked nearby rendering for continued growth.
+* Custom Home Builder with names, six architectural styles, and 1–3 floors.
+* Saved interior for every home, with Bedroom/Bathroom/Living/Kitchen/Dining/Study.
+* Interior furniture: bed, headboard, end tables, dresser, toilet, sink, bathtub,
+  shower, sofa, table, chair, lamp, rug, plant, and removal tool.
+* Smooth map zoom from 55% to 225% using buttons or the mouse wheel.
+* Star Chart mode with a named constellation and neighboring-world routes.
+* Animated townspeople, deer, rabbits, foxes, dogs, and birds roam the map.
+* Street View mode renders the city from the player's position at ground level.
+* Q/R turn the Street View camera; WASD/arrows continue walking.
+* New linked /world-engine visual city builder with an isometric map.
+* Road, residential, commercial, industrial, park, and bulldoze tools.
+* Automatic zone growth and a one-year-in-eight-minutes simulation clock.
+* Click-to-walk plus WASD/arrow movement and interactive building doors.
+* Shared SQLite autosave/resume and live player heartbeats.
+* Safe inactive-player sweep: archive after 30 minutes; purge after 30 days.
+* Repaired recursive SQLite World Forge save bug in the original package.

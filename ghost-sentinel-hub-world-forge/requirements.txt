@@ -1,0 +1,6 @@
+flask
+gunicorn
+flask-socketio
+gevent
+gevent-websocket
+cryptography

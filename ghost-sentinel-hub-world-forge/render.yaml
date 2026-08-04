@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ghost-sentinel-hub
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 ghost_hub:app
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    envVars:
+      - key: GHOST_DATA_DIR
+        value: /var/data
+      - key: GHOST_HUB_DB
+        value: /var/data/worlds.db
+    disk:
+      name: ghost-sentinel-data
+      mountPath: /var/data
+      sizeGB: 1
